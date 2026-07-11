@@ -1,0 +1,26 @@
+#!/usr/bin/env php
+<?php
+
+if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
+    require __DIR__ . '/../vendor/autoload.php';
+} elseif (file_exists(__DIR__ . '/../../autoload.php')) {
+    require __DIR__ . '/../../autoload.php';
+} else {
+    fwrite(STDERR, "Error: Autoloader not found. Run 'composer install' first.\n");
+    exit(1);
+}
+
+use Symfony\Component\Console\Application;
+use Panda\Cli\InitCommand;
+use Panda\Cli\RotateKeyCommand;
+use Panda\Cli\ShredCommand;
+use Panda\Cli\MigrateCommand;
+
+$application = new Application('PANDA CLI', '0.1.0');
+
+$application->add(new InitCommand());
+$application->add(new RotateKeyCommand());
+$application->add(new ShredCommand());
+$application->add(new MigrateCommand());
+
+$application->run();

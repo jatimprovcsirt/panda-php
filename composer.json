@@ -1,0 +1,31 @@
+{
+  "name": "jatimprovcsirt/panda-php",
+  "description": "PANDA (Private And Secure Data Access) SDK for PHP",
+  "license": "MIT",
+  "minimum-stability": "stable",
+  "prefer-stable": true,
+  "authors": [
+    {
+      "name": "Bidang Persandian dan Keamanan Aplikasi",
+      "email": "csirt@jatimprov.go.id"
+    }
+  ],
+  "require": {
+    "php": "^8.1",
+    "psr/log": "^2.0 || ^3.0",
+    "symfony/console": "^6.0 || ^7.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^10.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Panda\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Panda\\Tests\\": "tests/"
+    }
+  }
+}

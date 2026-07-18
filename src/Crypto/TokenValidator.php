@@ -25,9 +25,9 @@ class TokenValidator
 {
     /**
      * Regex pattern for a valid PANDA access token.
-     * Format: panda_(demo|live)_<48 hex characters>
+     * Format: panda_(demo|live)_<48 or 64 hex characters>
      */
-    public const TOKEN_PATTERN = '/^panda_(demo|live)_[a-f0-9]{48}$/';
+    public const TOKEN_PATTERN = '/^panda_(demo|live)_([a-f0-9]{48}|[a-f0-9]{64})$/';
 
     /**
      * The static demo token shipped in .env.example and documentation.
@@ -56,7 +56,7 @@ class TokenValidator
         if (!preg_match(self::TOKEN_PATTERN, $token)) {
             throw new InvalidTokenException(
                 "The provided token does not match the expected format.\n" .
-                "Expected: panda_(demo|live)_<48 hex characters>\n" .
+                "Expected: panda_(demo|live)_<48 or 64 hex characters>\n" .
                 "Got: " . substr($token, 0, 20) . (strlen($token) > 20 ? '...' : '')
             );
         }

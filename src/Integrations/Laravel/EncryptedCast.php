@@ -57,4 +57,25 @@ class EncryptedCast implements CastsAttributes
         $envelope = $cipher->encrypt($value, $this->kid, 'laravel', $key);
         return $envelope->toJson();
     }
+
+    /**
+     * Decrypt the given raw envelope value to plaintext (unmasked).
+     */
+    public static function decryptRawValue($value, string $fieldName = 'unknown'): ?string
+    {
+        if (is_null($value) || $value === '') {
+            return $value;
+        }
+
+        /** @var FieldCipher $cipher */
+        $cipher = app(FieldCipher::class);
+
+        try {
+            $envelope = Envelope::fromJson($value);
+            return $cipher->decryptRaw($envelope, 'laravel-raw', $fieldName);
+        } catch (\Exception $e) {
+            // Shadow mode / dual-read fallback
+            return $value;
+        }
+    }
 }

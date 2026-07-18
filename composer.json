@@ -10,6 +10,9 @@
       "email": "csirt@jatimprov.go.id"
     }
   ],
+  "bin": [
+    "bin/panda"
+  ],
   "require": {
     "php": "^8.1",
     "psr/log": "^2.0 || ^3.0",
@@ -26,6 +29,13 @@
   "autoload-dev": {
     "psr-4": {
       "Panda\\Tests\\": "tests/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Panda\\Integrations\\Laravel\\PandaServiceProvider"
+      ]
     }
   }
 }

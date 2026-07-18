@@ -39,6 +39,17 @@ class PandaServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // Bootstrapping tasks (e.g. publishing configuration, if any)
+        // Publish configuration file
+        $this->publishes([
+            __DIR__ . '/config/panda.php' => config_path('panda.php'),
+        ], 'panda-config');
+
+        // Register console commands
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                Console\InstallCommand::class,
+                Console\MakeFieldCommand::class,
+            ]);
+        }
     }
 }

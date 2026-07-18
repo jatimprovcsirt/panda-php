@@ -26,6 +26,15 @@ class TokenValidatorTest extends TestCase
         TokenValidator::validateToken($liveToken);
     }
 
+    public function testValidateLiveToken64CharsSuccess(): void
+    {
+        $liveToken = 'panda_live_76d08573d453cdbdb4bf5704d13f8f54d57cd3c47c9b4be276d08573d453cdbd';
+        $this->assertFalse(TokenValidator::isDemoToken($liveToken));
+        
+        // Should not throw
+        TokenValidator::validateToken($liveToken);
+    }
+
     public function testValidateTokenEmptyThrows(): void
     {
         $this->expectException(InvalidTokenException::class);

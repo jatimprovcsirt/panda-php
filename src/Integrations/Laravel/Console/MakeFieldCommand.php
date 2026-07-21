@@ -105,14 +105,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('{$table}', function (Blueprint $table) {
+        Schema::table('{$table}', function (Blueprint \$table) {
             {$upSchema}
         });
     }
 
     public function down(): void
     {
-        Schema::table('{$table}', function (Blueprint $table) {
+        Schema::table('{$table}', function (Blueprint \$table) {
             \$table->dropColumn([{$downSchema}]);
         });
     }

@@ -8,6 +8,16 @@ use Panda\Exception\InvalidTokenException;
 
 class TokenValidatorTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        // Set test mode to skip online validation during unit tests
+        putenv('PANDA_SKIP_ONLINE_VALIDATION=1');
+    }
+
+    protected function tearDown(): void
+    {
+        putenv('PANDA_SKIP_ONLINE_VALIDATION');
+    }
     public function testValidateDemoTokenSuccess(): void
     {
         $demoToken = TokenValidator::DEMO_TOKEN;

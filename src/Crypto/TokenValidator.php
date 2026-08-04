@@ -7,12 +7,10 @@ use Panda\Exception\InvalidTokenException;
 /**
  * Validates PANDA access tokens for the init-time token gate (FR-28/FR-29).
  *
- * Token validation is phase-dependent:
- * - Pre-portal (current): local format check only — the token must match
- *   the expected shape (panda_demo_ or panda_live_ prefix + 48 hex chars).
- * - Post-portal (Phase 6+): a synchronous HTTPS call to the portal's
- *   validation endpoint will be added here. The format check remains as a
- *   fast pre-flight; the live call is the authoritative check.
+ * Token validation behavior:
+ * - Local format check is performed first (fast pre-flight).
+ * - The demo token skips all online validation - no HTTP call is ever made.
+ * - All other tokens require a successful portal validation check.
  *
  * This validator is used ONLY by the `init` CLI command. It is NOT used by
  * encrypt/decrypt/mask operations, which have zero portal dependency (FR-29).
@@ -35,12 +33,101 @@ class TokenValidator
     public const DEMO_TOKEN = 'panda_demo_76d08573d453cdbdb4bf5704d13f8f54d57cd3c47c9b4be2';
 
     /**
+     * The production portal validation endpoint.
+     */
+    private const DEFAULT_VALIDATION_URL = 'https://csirt.jatimprov.go.id/panda/api/v1/tokens/validate';
+
+    /**
+     * Get the validation URL from environment or default.
+     */
+    private static function getValidationURL(): string
+    {
+        return getenv('PANDA_VALIDATION_URL') ?: self::DEFAULT_VALIDATION_URL;
+    }
+
+    /**
+     * Check if online validation should be skipped (test mode).
+     */
+    private static function shouldSkipOnlineValidation(): bool
+    {
+        return getenv('PANDA_SKIP_ONLINE_VALIDATION') === '1';
+    }
+
+    /**
+     * Performs a synchronous HTTPS call to validate the token against the PANDA portal.
+     * This is blocking and fail-closed.
+     *
+     * @throws InvalidTokenException if validation fails for any reason.
+     */
+    private static function validateTokenOnline(string $token): void
+    {
+        $ch = curl_init(self::getValidationURL());
+
+        $payload = json_encode(['token' => $token]);
+        if ($payload === false) {
+            throw new InvalidTokenException(
+                'Failed to encode validation request. Please try again later.'
+            );
+        }
+
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_POSTFIELDS => $payload,
+            CURLOPT_TIMEOUT => 5,
+            CURLOPT_CONNECT_TIMEOUT => 5,
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($error !== '') {
+            throw new InvalidTokenException(
+                'Unable to reach the PANDA portal for token validation. Please check your network connection and try again.'
+            );
+        }
+
+        if ($httpCode !== 200) {
+            throw new InvalidTokenException(
+                "PANDA portal returned unexpected status code {$httpCode}. Please try again later."
+            );
+        }
+
+        $result = json_decode($response, true);
+        if ($result === null || !isset($result['valid'])) {
+            throw new InvalidTokenException(
+                'Failed to parse portal response. Please try again later.'
+            );
+        }
+
+        if (!$result['valid']) {
+            $reason = $result['reason'] ?? 'invalid';
+            switch ($reason) {
+                case 'revoked':
+                    throw new InvalidTokenException(
+                        'The provided token has been revoked by the portal administrator.'
+                    );
+                case 'already_activated':
+                    throw new InvalidTokenException(
+                        'The provided token has already been used. Each token can only be activated once.'
+                    );
+                default:
+                    throw new InvalidTokenException(
+                        'The provided token is invalid or not recognized by the PANDA portal.'
+                    );
+            }
+        }
+    }
+
+    /**
      * Validate the given access token.
      *
-     * Pre-portal: performs a local format check only.
-     * Post-portal: will additionally call the portal validation endpoint.
+     * Performs a local format check followed by portal validation (except for demo token).
      *
-     * @throws InvalidTokenException if the token is missing, empty, or malformed.
+     * @throws InvalidTokenException if the token is missing, empty, malformed, or fails portal validation.
      */
     public static function validateToken(string $token): void
     {
@@ -61,11 +148,19 @@ class TokenValidator
             );
         }
 
-        // Pre-portal phase: format check is sufficient (Technical PRD Section 14.2).
-        // Post-portal phase (Phase 6+): add live HTTPS validation call here.
-        // The call would be blocking and fail-closed — if it fails, init refuses
-        // to generate a key. This is the one exception to the SDK's fail-silent
-        // portal interaction policy.
+        // Demo token skips all online validation - no HTTP call is ever made.
+        if (self::isDemoToken($token)) {
+            return;
+        }
+
+        // Test mode: skip online validation when PANDA_SKIP_ONLINE_VALIDATION=1
+        if (self::shouldSkipOnlineValidation()) {
+            return;
+        }
+
+        // For non-demo tokens, perform online validation.
+        // This is blocking and fail-closed — if it fails, init refuses to generate a key.
+        self::validateTokenOnline($token);
     }
 
     /**
@@ -82,8 +177,8 @@ class TokenValidator
      */
     public static function isLocalEnvironment(): bool
     {
-        return in_array(getenv('APP_ENV'), ['local', 'dev', 'development', 'testing'])
-            || in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1', 'localhost'])
+        return in_array(getenv('APP_ENV'), ['local', 'dev', 'development', 'testing'], true)
+            || in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1', 'localhost'], true)
             || (php_sapi_name() === 'cli' && getenv('APP_ENV') !== 'production');
     }
 }

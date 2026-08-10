@@ -21,9 +21,18 @@ composer require jatimprovcsirt/panda-php
 
 Sebelum menulis kode integrasi apapun, Anda harus menghasilkan kunci master lokal untuk aplikasi Anda. Ini adalah gerbang keamanan satu kali sebelum PANDA bisa beroperasi.
 
-### Langkah 1: Jalankan Perintah Init
+### Langkah 1: Dapatkan PANDA Access Token
 
-Jalankan perintah berikut di direktori root proyek Anda. Ganti `opd-dukcapil-key-1` dengan key identifier (KID) Anda dan `YOUR_TOKEN` dengan PANDA Access Token yang diperoleh dari portal PANDA (panjang: 48 atau 64 karakter hex):
+Anda harus memiliki PANDA Access Token untuk menginisialisasi kunci master aplikasi Anda.
+
+**Daftar aplikasi dan dapatkan token di:** https://csirt.jatimprov.go.id/panda
+
+> [!NOTE]
+> Setiap aplikasi memerlukan token unik. Token digunakan sebagai gerbang keamanan satu kali untuk inisialisasi kunci.
+
+### Langkah 2: Jalankan Perintah Init
+
+Jalankan perintah berikut di direktori root proyek Anda. Ganti `opd-dukcapil-key-1` dengan key identifier (KID) Anda dan `YOUR_TOKEN` dengan PANDA Access Token yang diperoleh dari portal (panjang: 48 atau 64 karakter hex):
 
 ```bash
 # Menggunakan binary CLI dari vendor (setelah composer install)

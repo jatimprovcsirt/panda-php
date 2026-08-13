@@ -2,12 +2,16 @@
 
 namespace Panda\Cli;
 
+use Panda\Cli\Utils\PandaDirectory;
 use Panda\Crypto\TokenValidator;
 use Panda\Exception\InvalidTokenException;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Question\Question;
+use Symfony\Component\Console\Question\ChoiceQuestion;
+use Symfony\Component\Console\Style\SymfonyStyle;
 
 class InitCommand extends Command
 {
@@ -17,70 +21,362 @@ class InitCommand extends Command
     {
         $this
             ->setName('init')
-            ->setDescription('Initialize local PANDA master key')
-            ->addOption('kid', 'k', InputOption::VALUE_REQUIRED, 'Key Identifier', 'default-key')
+            ->setDescription('Initialize PANDA with interactive wizard')
+            ->addOption('kid', 'k', InputOption::VALUE_REQUIRED, 'Key Identifier (quick mode)', 'default-key')
             ->addOption(
                 'token',
                 't',
-                InputOption::VALUE_REQUIRED,
-                'Per-application access token (falls back to PANDA_ACCESS_TOKEN env var). '
-                . 'Required to generate a new master key (FR-28). '
-                . 'This is the only command that requires a token — encrypt/decrypt/mask never need one.'
-            );
+                InputOption::VALUE_OPTIONAL,
+                'Per-application access token'
+            )
+            ->addOption('quick', 'q', InputOption::VALUE_NONE, 'Skip wizard, use quick setup with local provider')
+            ->addOption('reinit', null, InputOption::VALUE_NONE, 'Reinitialize even if already initialized')
+            ->addOption('skip-key-gen', null, InputOption::VALUE_NONE, 'Skip first key generation');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        // Step 1: Token gate (FR-28/FR-29)
-        // This is the ONLY network-dependent step (post-portal) and the ONLY place
-        // in the entire SDK where portal reachability can legitimately block an operation.
+        $io = new SymfonyStyle($input, $output);
+        $helper = $this->getHelper('question');
+
+        // Check if already initialized
+        if (PandaDirectory::exists() && !$input->getOption('reinit')) {
+            $io->warning('PANDA is already initialized.');
+            $io->note('Use --reinit to reinitialize.');
+            return Command::SUCCESS;
+        }
+
         $token = $input->getOption('token') ?: getenv('PANDA_ACCESS_TOKEN');
 
-        try {
-            TokenValidator::validateToken($token ?: '');
-        } catch (InvalidTokenException $e) {
-            $output->writeln("<error>Token gate failed: {$e->getMessage()}</error>");
-            return Command::FAILURE;
+        if ($input->getOption('quick')) {
+            return $this->runQuickInit($io, $token, $input->getOption('skip-key-gen'));
         }
 
-        // Demo token warning (Technical PRD Section 14.3)
-        if (TokenValidator::isDemoToken($token) && !TokenValidator::isLocalEnvironment()) {
-            $output->writeln(
-                "<comment>⚠️ WARNING: You are using the static DEMO TOKEN outside a local development environment.\n"
-                . "Please register your application at the PANDA portal to obtain a per-application live token.</comment>"
-            );
+        return $this->runWizard($input, $output, $io, $helper, $token, $input->getOption('skip-key-gen'));
+    }
+
+    private function runQuickInit(SymfonyStyle $io, ?string $token, bool $skipKeyGen): int
+    {
+        $io->title('PANDA Quick Init');
+
+        // Validate token
+        if ($token) {
+            try {
+                TokenValidator::validateToken($token);
+                $io->success('Token validated');
+            } catch (InvalidTokenException $e) {
+                $io->error("Token gate failed: " . $e->getMessage());
+                return Command::FAILURE;
+            }
+
+            if (TokenValidator::isDemoToken($token) && !TokenValidator::isLocalEnvironment()) {
+                $io->warning('You are using the static DEMO TOKEN outside a local development environment.');
+                $io->note('Please register your application at the PANDA portal to obtain a per-application live token.');
+            }
         }
 
-        $output->writeln("<info>✓ token gate passed (format check, pre-portal — Section 14.2)</info>");
+        // Create .panda directory
+        PandaDirectory::create();
 
-        // Step 2: Key generation (FR-12, unchanged)
-        // The key is generated locally via CSPRNG and NEVER transmitted over the network.
-        $kid = $input->getOption('kid');
-        $normalizedKid = strtoupper(preg_replace('/[^A-Za-z0-9]/', '_', $kid));
-        $envVarName = "PANDA_KEY_{$normalizedKid}";
+        // Store credentials
+        $credentials = [
+            'token' => $token,
+            'provider' => 'local',
+        ];
 
-        // Generate 32 bytes key
+        PandaDirectory::writeCredentials($credentials);
+
+        // Generate default key
+        if (!$skipKeyGen) {
+            $this->generateAndStoreKey($io, 'default-key', $credentials, 'Default PANDA key');
+        }
+
+        $io->success('PANDA initialized successfully!');
+        $io->note("Run 'panda status' to verify configuration.");
+
+        return Command::SUCCESS;
+    }
+
+    private function runWizard(InputInterface $input, OutputInterface $output, SymfonyStyle $io, $helper, ?string $token, bool $skipKeyGen): int
+    {
+        $io->title('PANDA Initialization Wizard');
+
+        // Step 1: Authentication
+        $io->section('Step 1: Authentication');
+
+        if (!$token) {
+            $question = new Question('Enter your PANDA access token (or press Enter to skip): ');
+            $token = $helper->ask($input, $output, $question);
+        }
+
+        if ($token) {
+            try {
+                TokenValidator::validateToken($token);
+                $io->success('Token format validated');
+            } catch (InvalidTokenException $e) {
+                $io->warning('Token validation failed: ' . $e->getMessage());
+                if (!$io->confirm('Continue anyway?', false)) {
+                    $io->note('Initialization cancelled.');
+                    return Command::SUCCESS;
+                }
+            }
+        }
+
+        // Create .panda directory
+        PandaDirectory::create();
+
+        // Step 2: Select provider
+        $io->section('Step 2: Key Provider Selection');
+        $io->text('Where should encryption keys be stored?');
+
+        $question = new ChoiceQuestion(
+            'Enter choice (default: Local)',
+            ['Local (environment variables)', 'HashiCorp Vault', 'Infisical'],
+            0
+        );
+        $choice = $helper->ask($input, $output, $question);
+
+        $credentials = ['token' => $token];
+
+        switch ($choice) {
+            case 1: // Vault
+                $credentials = $this->setupVault($input, $output, $io, $helper, $token);
+                break;
+            case 2: // Infisical
+                $credentials = $this->setupInfisical($input, $output, $io, $helper, $token);
+                break;
+            default: // Local
+                $credentials['provider'] = 'local';
+                break;
+        }
+
+        // Step 3: Default Key ID
+        $io->section('Step 3: Default Key Configuration');
+
+        $question = new Question('Default Key ID [default: default-key]: ', 'default-key');
+        $defaultKid = $helper->ask($input, $output, $question);
+        $credentials['defaultKid'] = $defaultKid;
+
+        // Write credentials
+        PandaDirectory::writeCredentials($credentials);
+
+        // Step 4: Generate key
+        $io->section('Step 4: Key Generation');
+
+        if (!$skipKeyGen) {
+            $this->generateAndStoreKey($io, $defaultKid, $credentials, 'Default key from wizard');
+        }
+
+        // Step 5: Framework selection
+        $io->section('Step 5: Framework Integration');
+
+        $question = new ChoiceQuestion(
+            'Select your framework (default: None/Skip)',
+            ['Laravel', 'NestJS', 'CodeIgniter', 'Express', 'None/Skip'],
+            4
+        );
+        $framework = $helper->ask($input, $output, $question);
+
+        switch ($framework) {
+            case 'Laravel':
+                $this->printLaravelInstructions($io, $credentials, $defaultKid);
+                break;
+            case 'NestJS':
+                $this->printNestJSInstructions($io, $credentials, $defaultKid);
+                break;
+        }
+
+        $io->success('PANDA initialization complete!');
+        $io->note([
+            "Next steps:",
+            "  - Use 'panda generate <kid>' to create encryption keys",
+            "  - Use 'panda status' to verify configuration",
+            "  - Use 'panda migrate' to encrypt existing data"
+        ]);
+
+        return Command::SUCCESS;
+    }
+
+    private function setupVault(InputInterface $input, OutputInterface $output, SymfonyStyle $io, $helper, ?string $token): array
+    {
+        $io->text('Configuring HashiCorp Vault...');
+
+        $question = new Question('Vault URL [default: http://127.0.0.1:8200]: ', 'http://127.0.0.1:8200');
+        $vaultUrl = $helper->ask($input, $output, $question);
+
+        $question = new Question('Vault Token: ');
+        $question->setHidden(true);
+        $vaultToken = $helper->ask($input, $output, $question);
+
+        $question = new Question('Mount path [default: secret]: ', 'secret');
+        $vaultMount = $helper->ask($input, $output, $question);
+
+        return [
+            'token' => $token,
+            'provider' => 'vault',
+            'vaultUrl' => $vaultUrl,
+            'vaultToken' => $vaultToken,
+            'vaultMount' => $vaultMount
+        ];
+    }
+
+    private function setupInfisical(InputInterface $input, OutputInterface $output, SymfonyStyle $io, $helper, ?string $token): array
+    {
+        $io->text('Configuring Infisical...');
+
+        $question = new Question('Infisical Site URL [default: https://app.infisical.com]: ', 'https://app.infisical.com');
+        $siteUrl = $helper->ask($input, $output, $question);
+
+        $question = new Question('Machine Identity Client ID: ');
+        $clientId = $helper->ask($input, $output, $question);
+
+        $question = new Question('Machine Identity Client Secret: ');
+        $question->setHidden(true);
+        $clientSecret = $helper->ask($input, $output, $question);
+
+        $question = new Question('Project ID: ');
+        $projectId = $helper->ask($input, $output, $question);
+
+        $question = new Question('Environment [default: dev]: ', 'dev');
+        $environment = $helper->ask($input, $output, $question);
+
+        $question = new Question('Cache TTL in seconds [default: 300]: ', '300');
+        $cacheTTL = $helper->ask($input, $output, $question);
+
+        return [
+            'token' => $token,
+            'provider' => 'infisical',
+            'infisicalSiteUrl' => $siteUrl,
+            'infisicalClientId' => $clientId,
+            'infisicalClientSecret' => $clientSecret,
+            'infisicalProjectId' => $projectId,
+            'infisicalEnvironment' => $environment,
+            'infisicalCacheTTL' => $cacheTTL
+        ];
+    }
+
+    private function generateAndStoreKey(OutputInterface $output, string $kid, array &$credentials, ?string $description): void
+    {
+        $output->writeln("Generating key for KID: {$kid}");
+
+        if ($description) {
+            $output->writeln("Description: {$description}");
+        }
+
+        // Generate 32-byte random key
         $keyBytes = random_bytes(32);
         $keyBase64 = base64_encode($keyBytes);
 
-        $envFile = getcwd() . '/.env';
-        $exampleFile = getcwd() . '/.env.example';
+        switch ($credentials['provider']) {
+            case 'local':
+                $this->storeLocalKey($output, $kid, $keyBase64, $credentials);
+                break;
+            case 'vault':
+                $this->storeVaultKey($output, $kid, $keyBase64, $credentials);
+                break;
+            case 'infisical':
+                $this->storeInfisicalKey($output, $kid, $keyBase64, $credentials);
+                break;
+        }
+    }
 
-        // Write to .env
-        $this->appendEnv($envFile, $envVarName, $keyBase64);
-        // Write placeholder to .env.example
-        $this->appendEnv($exampleFile, $envVarName, '');
+    private function storeLocalKey(OutputInterface $output, string $kid, string $keyBase64, array &$credentials): void
+    {
+        $normalizedKid = strtoupper(preg_replace('/[^A-Za-z0-9]/', '_', $kid));
+        $envVarName = "PANDA_KEY_{$normalizedKid}";
 
-        $output->writeln("<info>✓ local master key generated, written to .env</info>");
-        $output->writeln("Generated key for KID: <comment>{$kid}</comment>");
-        $output->writeln("Variable written to .env: <comment>{$envVarName}</comment>");
-        $output->writeln("<comment>Keep this key secret and secure!</comment>");
-        $output->writeln(
-            "# From here on, this application never contacts the portal again for\n"
-            . "# encrypt/decrypt/mask, rotate, or migrate — Section 9, Section 14."
-        );
+        $envPath = '.env';
+        $examplePath = '.env.example';
 
-        return Command::SUCCESS;
+        $this->appendEnv($envPath, $envVarName, $keyBase64);
+        $this->appendEnv($examplePath, $envVarName, '');
+
+        $output->writeln("✓ Key stored in .env as {$envVarName}");
+        $output->writeln("<comment>⚠️  IMPORTANT: Commit .env to your secret management system!</comment>");
+
+        // Update credentials keys metadata
+        if (!isset($credentials['keys'])) {
+            $credentials['keys'] = [];
+        }
+        $credentials['keys'][$kid] = [
+            'created' => date('c'),
+            'provider' => 'local'
+        ];
+
+        PandaDirectory::writeCredentials($credentials);
+    }
+
+    private function storeVaultKey(OutputInterface $output, string $kid, string $keyBase64, array &$credentials): void
+    {
+        $output->writeln("Storing key in Vault at {$credentials['vaultMount']}/{$kid}");
+        $output->writeln("Note: Manual setup required. Use Vault CLI or UI:");
+        $output->writeln("  vault kv put {$credentials['vaultMount']}/{$kid} value={$keyBase64}");
+
+        // Update credentials keys metadata
+        if (!isset($credentials['keys'])) {
+            $credentials['keys'] = [];
+        }
+        $credentials['keys'][$kid] = [
+            'created' => date('c'),
+            'provider' => 'vault'
+        ];
+
+        PandaDirectory::writeCredentials($credentials);
+    }
+
+    private function storeInfisicalKey(OutputInterface $output, string $kid, string $keyBase64, array &$credentials): void
+    {
+        $output->writeln("Storing key in Infisical at path: {$kid}");
+        $output->writeln("Note: Manual setup may be required. Create secret in Infisical UI:");
+        $output->writeln("  Path: {$kid}");
+        $output->writeln("  Value (base64): {$keyBase64}");
+
+        // Update credentials keys metadata
+        if (!isset($credentials['keys'])) {
+            $credentials['keys'] = [];
+        }
+        $credentials['keys'][$kid] = [
+            'created' => date('c'),
+            'provider' => 'infisical'
+        ];
+
+        PandaDirectory::writeCredentials($credentials);
+    }
+
+    private function printLaravelInstructions(OutputInterface $output, array $credentials, string $defaultKid): void
+    {
+        $output->writeln("\nFor Laravel, add these to your .env:");
+        $output->writeln("PANDA_KEY_PROVIDER_DRIVER={$credentials['provider']}");
+        $output->writeln("PANDA_DEFAULT_KID={$defaultKid}");
+
+        if ($credentials['provider'] === 'vault') {
+            $output->writeln("PANDA_VAULT_URL={$credentials['vaultUrl']}");
+            $output->writeln("PANDA_VAULT_TOKEN=***");
+            $output->writeln("PANDA_VAULT_MOUNT_PATH={$credentials['vaultMount']}");
+        } elseif ($credentials['provider'] === 'infisical') {
+            $output->writeln("PANDA_INFISICAL_SITE_URL={$credentials['infisicalSiteUrl']}");
+            $output->writeln("PANDA_INFISICAL_CLIENT_ID={$credentials['infisicalClientId']}");
+            $output->writeln("PANDA_INFISICAL_CLIENT_SECRET=***");
+            $output->writeln("PANDA_INFISICAL_PROJECT_ID={$credentials['infisicalProjectId']}");
+            $output->writeln("PANDA_INFISICAL_ENVIRONMENT={$credentials['infisicalEnvironment']}");
+        }
+    }
+
+    private function printNestJSInstructions(OutputInterface $output, array $credentials, string $defaultKid): void
+    {
+        $output->writeln("\nFor NestJS, use PandaModule.forRoot() in your app.module.ts:");
+        $output->writeln("PandaModule.forRoot({");
+        $output->writeln("  keyProvider: '{$credentials['provider']}',");
+        if ($credentials['provider'] === 'infisical') {
+            $output->writeln("  infisical: {");
+            $output->writeln("    siteUrl: '{$credentials['infisicalSiteUrl']}',");
+            $output->writeln("    clientId: '{$credentials['infisicalClientId']}',");
+            $output->writeln("    clientSecret: '***',");
+            $output->writeln("    projectId: '{$credentials['infisicalProjectId']}',");
+            $output->writeln("    environment: '{$credentials['infisicalEnvironment']}'");
+            $output->writeln("  }");
+        }
+        $output->writeln("})");
     }
 
     private function appendEnv(string $filePath, string $name, string $value): void
@@ -90,12 +386,10 @@ class InitCommand extends Command
             $content = file_get_contents($filePath);
         }
 
-        // Check if variable already exists
-        if (preg_match("/^{$name}=/m", $content)) {
-            // Replace existing value
-            $content = preg_replace("/^{$name}=.*/m", "{$name}={$value}", $content);
+        $regex = "/^{$name}=.*\\r?\\n?/m";
+        if (preg_match($regex, $content)) {
+            $content = preg_replace($regex, "{$name}={$value}\n", $content);
         } else {
-            // Append
             $content .= "\n{$name}={$value}\n";
         }
 

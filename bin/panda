@@ -15,10 +15,18 @@ use Panda\Cli\InitCommand;
 use Panda\Cli\RotateKeyCommand;
 use Panda\Cli\ShredCommand;
 use Panda\Cli\MigrateCommand;
+use Panda\Cli\GenerateCommand;
+use Panda\Cli\StatusCommand;
+use Panda\Cli\ConfigCommand;
+use Panda\Cli\DeinitCommand;
 
 $application = new Application('PANDA CLI', '0.1.0');
 
 $application->add(new InitCommand());
+$application->add(new GenerateCommand());
+$application->add(new StatusCommand());
+$application->add(new ConfigCommand());
+$application->add(new DeinitCommand());
 $application->add(new RotateKeyCommand());
 $application->add(new ShredCommand());
 $application->add(new MigrateCommand());

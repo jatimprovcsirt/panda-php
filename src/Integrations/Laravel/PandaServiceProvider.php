@@ -4,7 +4,7 @@ namespace Panda\Integrations\Laravel;
 
 use Illuminate\Support\ServiceProvider;
 use Panda\Crypto\KeyProvider;
-use Panda\Crypto\LocalKeyProvider;
+use Panda\Crypto\KeyProviderFactory;
 use Panda\Crypto\FieldCipher;
 use Panda\Audit\AuditLogger;
 use Panda\Telemetry\TelemetryClient;
@@ -14,8 +14,24 @@ class PandaServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(KeyProvider::class, function ($app) {
-            // Defaults to LocalKeyProvider. Adopters can override this binding for Vault or HSM.
-            return new LocalKeyProvider();
+            $driver = config('panda.key_provider_driver', 'local');
+
+            return match ($driver) {
+                'vault' => KeyProviderFactory::create('vault', [
+                    'vaultUrl' => config('panda.vault.url'),
+                    'vaultToken' => config('panda.vault.token'),
+                    'mountPath' => config('panda.vault.mount_path', 'secret'),
+                ]),
+                'infisical' => KeyProviderFactory::create('infisical', [
+                    'siteUrl' => config('panda.infisical.site_url'),
+                    'clientId' => config('panda.infisical.client_id'),
+                    'clientSecret' => config('panda.infisical.client_secret'),
+                    'projectId' => config('panda.infisical.project_id'),
+                    'environment' => config('panda.infisical.environment', 'dev'),
+                    'cacheTTL' => config('panda.infisical.cache_ttl', 300),
+                ]),
+                default => KeyProviderFactory::create('local'),
+            };
         });
 
         $this->app->singleton(AuditLogger::class, function ($app) {

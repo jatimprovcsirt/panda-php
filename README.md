@@ -104,6 +104,74 @@ php vendor/bin/panda shred opd-dukcapil-key-old
 
 ---
 
+## Infisical Setup (Production-Ready Alternative)
+
+Untuk deployment produksi, disarankan menggunakan Infisical sebagai KeyProvider alih-alih LocalKeyProvider (env vars).
+
+### Setup Infisical Cloud
+
+1. **Buat Akun Infisical**
+   - Daftar di https://infisical.com (free tier tersedia)
+   - Buat project baru
+   - Buat environment (dev, staging, prod)
+
+2. **Buat Machine Identity**
+   - Buka "Machine Identities" di project Anda
+   - Klik "Create Machine Identity"
+   - Pilih environment yang diakses
+   - Copy Client ID dan Client Secret
+
+3. **Upload Kunci Enkripsi**
+   - Buka "Secrets" di project
+   - Pilih environment
+   - Klik "Add Secret"
+   - Secret Key: `nik-key` (atau KID Anda)
+   - Secret Value: `<base64-encoded-32-byte-key>` (generate dengan `openssl rand -base64 32`)
+
+4. **Konfigurasi Aplikasi**
+   ```bash
+   # .env
+   PANDA_KEY_PROVIDER_DRIVER=infisical
+   PANDA_INFISICAL_SITE_URL=https://app.infisical.com
+   PANDA_INFISICAL_CLIENT_ID=<client-id>
+   PANDA_INFISICAL_CLIENT_SECRET=<client-secret>
+   PANDA_INFISICAL_PROJECT_ID=<project-id>
+   PANDA_INFISICAL_ENVIRONMENT=dev
+   PANDA_INFISICAL_CACHE_TTL=300
+   ```
+
+### Menggunakan InfisicalKeyProvider dalam Kode
+
+```php
+use Panda\Crypto\InfisicalKeyProvider;
+use Panda\Crypto\FieldCipher;
+
+// Baca dari environment variables atau config
+$keyProvider = new InfisicalKeyProvider(
+    siteUrl: 'https://app.infisical.com',
+    clientId: $_ENV['PANDA_INFISICAL_CLIENT_ID'],
+    clientSecret: $_ENV['PANDA_INFISICAL_CLIENT_SECRET'],
+    projectId: $_ENV['PANDA_INFISICAL_PROJECT_ID'],
+    environment: $_ENV['PANDA_INFISICAL_ENVIRONMENT'],
+    cacheTTL: 300 // optional
+);
+
+$cipher = new FieldCipher($keyProvider);
+
+// Sisa kode tetap sama
+$envelope = $cipher->encrypt("3201012501990001", "nik-key");
+```
+
+**Keuntungan Infisical:**
+- ✅ Production-ready dengan auto-renewal (tanpa token expiration)
+- ✅ UI modern yang mudah digunakan
+- ✅ Free tier untuk project kecil
+- ✅ Cloud atau self-hosted options
+
+Untuk setup lengkap Infisical, lihat [Infisical Setup Guide](../../docs/infisical-setup-guide.md).
+
+---
+
 ## 2. Vanilla PHP Integration Guide
 
 Follow these steps to integrate PANDA in a standard PHP project without any frameworks.

@@ -77,8 +77,18 @@ class StatusCommand extends Command
             case 'vault':
                 $io->text('  Type: HashiCorp Vault');
                 $io->text("  URL: {$credentials['vaultUrl']}");
+                $authMethod = $credentials['vaultAuthMethod'] ?? 'token';
+                $io->text("  Auth: {$authMethod}");
+                if ($authMethod === 'approle') {
+                    $io->text(isset($credentials['vaultRoleId']) ? '  Role ID: ***configured***' : '  Role ID: not set');
+                    $io->text(isset($credentials['vaultSecretId']) ? '  Secret ID: ***configured***' : '  Secret ID: not set');
+                } else {
+                    $io->text(isset($credentials['vaultToken']) ? '  Token: ***configured***' : '  Token: not set');
+                }
+                if (isset($credentials['vaultTokenTTL'])) {
+                    $io->text("  Token TTL: {$credentials['vaultTokenTTL']} seconds");
+                }
                 $io->text("  Mount: {$credentials['vaultMount']}");
-                $io->text(isset($credentials['vaultToken']) ? '  Token: ***configured***' : '  Token: not set');
                 break;
 
             case 'infisical':

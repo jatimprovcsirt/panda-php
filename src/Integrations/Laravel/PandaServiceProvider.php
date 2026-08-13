@@ -21,6 +21,12 @@ class PandaServiceProvider extends ServiceProvider
                     'vaultUrl' => config('panda.vault.url'),
                     'vaultToken' => config('panda.vault.token'),
                     'mountPath' => config('panda.vault.mount_path', 'secret'),
+                    'namespace' => config('panda.vault.namespace'),
+                    'roleId' => config('panda.vault.role_id'),
+                    'secretId' => config('panda.vault.secret_id'),
+                    'authMethod' => config('panda.vault.auth_method'),
+                    'tokenTTL' => config('panda.vault.token_ttl', 3600),
+                    'cacheTTL' => config('panda.vault.cache_ttl', 300),
                 ]),
                 'infisical' => KeyProviderFactory::create('infisical', [
                     'siteUrl' => config('panda.infisical.site_url'),

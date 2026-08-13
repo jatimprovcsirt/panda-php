@@ -40,11 +40,23 @@ return [
      |
      | Configuration for HashiCorp Vault KV v2 secrets engine.
      |
+     | Supports two authentication methods:
+     | 1. Token-based: Use 'token' option
+     | 2. AppRole-based: Use 'role_id' and 'secret_id' options (auto-renewal)
+     |
      */
     'vault' => [
         'url' => env('PANDA_VAULT_URL'),
         'token' => env('PANDA_VAULT_TOKEN'),
         'mount_path' => env('PANDA_VAULT_MOUNT_PATH', 'secret'),
+        'namespace' => env('PANDA_VAULT_NAMESPACE'),
+
+        // AppRole authentication (alternative to token)
+        'role_id' => env('PANDA_VAULT_ROLE_ID'),
+        'secret_id' => env('PANDA_VAULT_SECRET_ID'),
+        'auth_method' => env('PANDA_VAULT_AUTH_METHOD'), // 'token' or 'approle'
+        'token_ttl' => env('PANDA_VAULT_TOKEN_TTL', 3600), // Token TTL in seconds
+        'cache_ttl' => env('PANDA_VAULT_CACHE_TTL', 300), // Key cache TTL in seconds
     ],
 
     /*

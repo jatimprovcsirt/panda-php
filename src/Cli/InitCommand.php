@@ -204,20 +204,73 @@ class InitCommand extends Command
         $question = new Question('Vault URL [default: http://127.0.0.1:8200]: ', 'http://127.0.0.1:8200');
         $vaultUrl = $helper->ask($input, $output, $question);
 
-        $question = new Question('Vault Token: ');
-        $question->setHidden(true);
-        $vaultToken = $helper->ask($input, $output, $question);
+        // Authentication method selection
+        $io->text("\nSelect Vault authentication method:");
+        $io->text('  1. AppRole (Recommended - Auto-renewal, production-ready)');
+        $io->text('  2. Token (Advanced - Manual renewal)');
+
+        $question = new Question('Choose method [default: 1]: ', '1');
+        $authChoice = $helper->ask($input, $output, $question);
+
+        $vaultAuthMethod = 'token';
+        $vaultToken = null;
+        $vaultRoleId = null;
+        $vaultSecretId = null;
+
+        if ($authChoice === '1') {
+            // AppRole authentication
+            $vaultAuthMethod = 'approle';
+            $io->text("\nUsing AppRole authentication (auto-renewal enabled)");
+
+            $question = new Question('Role ID: ');
+            $vaultRoleId = $helper->ask($input, $output, $question);
+
+            $question = new Question('Secret ID: ');
+            $question->setHidden(true);
+            $vaultSecretId = $helper->ask($input, $output, $question);
+
+            // Optional: Token TTL
+            $io->text("\nToken TTL (Optional)");
+            $io->text('  Token lifetime before auto-renewal. Default: 3600s (1 hour)');
+            $io->text('  Press Enter to use default, or enter custom value (300-86400 seconds)');
+
+            $question = new Question('Token TTL in seconds [default: 3600]: ', '3600');
+            $vaultTokenTTL = $helper->ask($input, $output, $question);
+        } else {
+            // Token authentication
+            $vaultAuthMethod = 'token';
+            $io->text("\nUsing Token authentication (manual renewal required)");
+
+            $question = new Question('Vault Token: ');
+            $question->setHidden(true);
+            $vaultToken = $helper->ask($input, $output, $question);
+        }
 
         $question = new Question('Mount path [default: secret]: ', 'secret');
         $vaultMount = $helper->ask($input, $output, $question);
 
-        return [
+        $result = [
             'token' => $token,
             'provider' => 'vault',
             'vaultUrl' => $vaultUrl,
-            'vaultToken' => $vaultToken,
+            'vaultAuthMethod' => $vaultAuthMethod,
             'vaultMount' => $vaultMount
         ];
+
+        if ($vaultToken) {
+            $result['vaultToken'] = $vaultToken;
+        }
+        if ($vaultRoleId) {
+            $result['vaultRoleId'] = $vaultRoleId;
+        }
+        if ($vaultSecretId) {
+            $result['vaultSecretId'] = $vaultSecretId;
+        }
+        if (isset($vaultTokenTTL)) {
+            $result['vaultTokenTTL'] = $vaultTokenTTL;
+        }
+
+        return $result;
     }
 
     private function setupInfisical(InputInterface $input, OutputInterface $output, SymfonyStyle $io, $helper, ?string $token): array
@@ -351,7 +404,16 @@ class InitCommand extends Command
 
         if ($credentials['provider'] === 'vault') {
             $output->writeln("PANDA_VAULT_URL={$credentials['vaultUrl']}");
-            $output->writeln("PANDA_VAULT_TOKEN=***");
+            $output->writeln("PANDA_VAULT_AUTH_METHOD={$credentials['vaultAuthMethod']}");
+            if ($credentials['vaultAuthMethod'] === 'approle') {
+                $output->writeln("PANDA_VAULT_ROLE_ID={$credentials['vaultRoleId']}");
+                $output->writeln("PANDA_VAULT_SECRET_ID=***");
+            } else {
+                $output->writeln("PANDA_VAULT_TOKEN=***");
+            }
+            if (isset($credentials['vaultTokenTTL'])) {
+                $output->writeln("PANDA_VAULT_TOKEN_TTL={$credentials['vaultTokenTTL']}");
+            }
             $output->writeln("PANDA_VAULT_MOUNT_PATH={$credentials['vaultMount']}");
         } elseif ($credentials['provider'] === 'infisical') {
             $output->writeln("PANDA_INFISICAL_SITE_URL={$credentials['infisicalSiteUrl']}");

@@ -32,12 +32,18 @@ Anda harus memiliki PANDA Access Token untuk menginisialisasi kunci master aplik
 
 ### Langkah 2: Jalankan Perintah Init
 
-Jalankan perintah berikut di direktori root proyek Anda. Ganti `opd-dukcapil-key-1` dengan key identifier (KID) Anda dan `YOUR_TOKEN` dengan PANDA Access Token yang diperoleh dari portal (panjang: 48 atau 64 karakter hex):
+Jalankan perintah berikut di direktori root proyek Anda. Ganti `YOUR_TOKEN` dengan PANDA Access Token yang diperoleh dari portal (panjang: 48 atau 64 karakter hex):
 
 ```bash
 # Menggunakan binary CLI dari vendor (setelah composer install)
-php vendor/bin/panda init --kid opd-dukcapil-key-1 --token YOUR_TOKEN
+php vendor/bin/panda init --token YOUR_TOKEN
 ```
+
+Setelah menjalankan perintah ini, wizard akan:
+1. Memvalidasi token Anda
+2. Meminta Anda memasukkan Key Identifier (KID) untuk kunci pertama
+3. Menghasilkan kunci 256-bit yang aman secara kriptografis secara **lokal**
+4. Menambahkan kunci dalam format base64 ke file `.env` Anda (misal: `PANDA_KEY_OPD_DUKCAPIL_KEY_1=...`)
 
 > [!NOTE]
 > Untuk pengembangan lokal, Anda dapat menggunakan demo token bawaan:
@@ -59,21 +65,18 @@ Perintah `init` melakukan hal berikut:
 
 ### Menambahkan KID/Kunci Tambahan
 
-Jika aplikasi Anda membutuhkan lebih dari satu kunci (misalnya untuk bidang data yang berbeda atau rotasi secara bertahap), jalankan perintah `init` kembali dengan KID baru dan **token yang sama**:
+Jika aplikasi Anda membutuhkan lebih dari satu kunci (misalnya untuk bidang data yang berbeda atau rotasi secara bertahap), gunakan perintah `generate` untuk menambahkan kunci tambahan tanpa memerlukan token:
 
 ```bash
-# Kunci pertama: untuk field NIK
-php vendor/bin/panda init --kid opd-dukcapil-key-1 --token YOUR_TOKEN
-
 # Kunci kedua: untuk field nomor HP
-php vendor/bin/panda init --kid opd-dukcapil-key-2 --token YOUR_TOKEN
+php vendor/bin/panda generate opd-dukcapil-key-2
 
 # Kunci untuk blind index (suffix -idx wajib dipisah dari kunci enkripsi)
-php vendor/bin/panda init --kid opd-dukcapil-key-1-idx --token YOUR_TOKEN
+php vendor/bin/panda generate opd-dukcapil-key-1-idx
 ```
 
 > [!NOTE]
-> Satu token dapat digunakan untuk menginisialisasi beberapa KID/kunci dalam aplikasi yang sama. Token digunakan kembali setiap kali Anda perlu menghasilkan kunci baru. Setelah kunci tersimpan di `.env`, operasi enkripsi/dekripsi sehari-hari **tidak pernah** menghubungi portal lagi.
+> Perintah `generate` hanya dapat digunakan setelah inisialisasi awal dengan `init`. Tidak perlu token lagi untuk menambahkan kunci baru. Setelah kunci tersimpan di `.env`, operasi enkripsi/dekripsi sehari-hari **tidak pernah** menghubungi portal lagi.
 
 ### Rotasi Kunci (Tanpa Portal)
 
@@ -96,7 +99,11 @@ php vendor/bin/panda shred opd-dukcapil-key-old
 
 | Perintah | Memerlukan Token | Deskripsi |
 |---|---|---|
-| `php vendor/bin/panda init --kid <kid> --token <token>` | ✅ Ya | Generate kunci master baru untuk KID tertentu |
+| `php vendor/bin/panda init --token <token>` | ✅ Ya | Inisialisasi PANDA dengan wizard interaktif untuk KID pertama |
+| `php vendor/bin/panda generate <kid>` | ❌ Tidak | Generate kunci tambahan untuk KID baru (tanpa wizard) |
+| `php vendor/bin/panda status` | ❌ Tidak | Tampilkan status konfigurasi PANDA saat ini |
+| `php vendor/bin/panda config` | ❌ Tidak | Tampilkan detail konfigurasi lengkap |
+| `php vendor/bin/panda deinit` | ❌ Tidak | Hapus konfigurasi PANDA dari proyek |
 | `php vendor/bin/panda rotate-key --new-kid <kid>` | ❌ Tidak | Buat kunci baru secara lokal, set sebagai default aktif |
 | `php vendor/bin/panda shred <kid>` | ❌ Tidak | Hapus kunci secara permanen (irreversible!) |
 | `php vendor/bin/panda migrate <table> <col> <kid>` | ❌ Tidak | Migrasi plaintext → encrypted envelope di database |
@@ -276,8 +283,10 @@ This:
 Run the `init` command to generate your local master key (as detailed in Section 1):
 
 ```bash
-php vendor/bin/panda init --kid default-key --token YOUR_TOKEN
+php vendor/bin/panda init --token YOUR_TOKEN
 ```
+
+The wizard will prompt you for your Key Identifier (KID). Enter `default-key` when prompted.
 
 > [!IMPORTANT]
 > **Restart your Laravel development server** (e.g. stop and restart `php artisan serve` or restart Docker containers) so Laravel can read the new environment keys.
@@ -371,8 +380,10 @@ Follow these steps to integrate PANDA in a CodeIgniter 4 application.
 Initialize your local master key using the CLI command:
 
 ```bash
-php vendor/bin/panda init --kid opd-dukcapil-key-1 --token YOUR_TOKEN
+php vendor/bin/panda init --token YOUR_TOKEN
 ```
+
+The wizard will prompt you for your Key Identifier (KID). Enter `opd-dukcapil-key-1` when prompted.
 
 Then, **restart your development server** (e.g. `spark serve` or php-fpm container).
 

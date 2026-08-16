@@ -97,17 +97,105 @@ php vendor/bin/panda shred opd-dukcapil-key-old
 
 ### Referensi CLI
 
-| Perintah | Memerlukan Token | Deskripsi |
-|---|---|---|
-| `php vendor/bin/panda init --token <token>` | ✅ Ya | Inisialisasi PANDA dengan wizard interaktif untuk KID pertama |
-| `php vendor/bin/panda generate <kid>` | ❌ Tidak | Generate kunci tambahan untuk KID baru (tanpa wizard) |
-| `php vendor/bin/panda status` | ❌ Tidak | Tampilkan status konfigurasi PANDA saat ini |
-| `php vendor/bin/panda config` | ❌ Tidak | Tampilkan detail konfigurasi lengkap |
-| `php vendor/bin/panda deinit` | ❌ Tidak | Hapus konfigurasi PANDA dari proyek |
-| `php vendor/bin/panda rotate-key --new-kid <kid>` | ❌ Tidak | Buat kunci baru secara lokal, set sebagai default aktif |
-| `php vendor/bin/panda shred <kid>` | ❌ Tidak | Hapus kunci secara permanen (irreversible!) |
-| `php vendor/bin/panda migrate <table> <col> <kid>` | ❌ Tidak | Migrasi plaintext → encrypted envelope di database |
-| `php vendor/bin/panda migrate --dry-run <table> <col> <kid>` | ❌ Tidak | Estimasi scope migrasi tanpa mengubah data |
+#### Mode Non-Interaktif (Flags untuk CI/CD)
+
+Semua perintah CLI dapat digunakan dalam mode non-interaktif dengan menggunakan flag. Ini sangat berguna untuk:
+
+- **CI/CD pipelines** - Otomatisasi tanpa interaksi pengguna
+- **Docker containers** - Inisialisasi otomatis saat container start
+- **Infrastructure as Code** - Integrasi dengan Terraform, Ansible, dll
+- **Automated testing** - Setup dan teardown otomatis
+
+##### Perintah Init - Mode Non-Interaktif
+
+```bash
+# Quick init dengan Local provider (mode tercepat)
+php vendor/bin/panda init --quick --token <token> --kid default-key
+
+# Init tanpa generate kunci pertama (untuk automation lanjutan)
+php vendor/bin/panda init --quick --token <token> --skip-key-gen
+
+# Reinitialize paksa (overwrite konfigurasi yang sudah ada)
+php vendor/bin/panda init --quick --token <token> --reinit
+```
+
+**Flag `init` yang tersedia:**
+
+| Flag | Short | Default | Deskripsi |
+|------|-------|---------|-----------|
+| `--token <value>` | `-t` | - | PANDA access token (atau set `PANDA_ACCESS_TOKEN` env) |
+| `--kid <value>` | `-k` | `default-key` | Key Identifier untuk kunci pertama |
+| `--quick` | `-q` | `false` | Skip wizard, gunakan quick setup dengan local provider |
+| `--reinit` | - | `false` | Reinitialize meskipun sudah pernah di-init sebelumnya |
+| `--skip-key-gen` | - | `false` | Skip generate kunci pertama |
+
+##### Perintah Generate - Mode Non-Interaktif
+
+```bash
+# Generate kunci dengan KID langsung (non-interactive)
+php vendor/bin/panda generate my-new-key
+
+# Generate dengan description
+php vendor/bin/panda generate nik-key --description "Key for NIK encryption"
+```
+
+**Flag `generate` yang tersedia:**
+
+| Flag | Short | Default | Deskripsi |
+|------|-------|---------|-----------|
+| `--description <text>` | `-d` | - | Deskripsi untuk kunci |
+
+##### Perintah Shred - Mode Non-Interaktif
+
+```bash
+# Hapus kunci dengan konfirmasi otomatis (hati-hati!)
+php vendor/bin/panda shred old-deprecated-key --force
+```
+
+**Flag `shred` yang tersedia:**
+
+| Flag | Short | Default | Deskripsi |
+|------|-------|---------|-----------|
+| `--force` | `-f` | `false` | Skip konfirmasi prompt (irreversible!) |
+
+##### Perintah Migrate - Mode Non-Interaktif
+
+```bash
+# Migrasi batch processing dengan flags
+php vendor/bin/panda migrate citizens nik default-key \
+  --batch-size 500 \
+  --delay 200 \
+  --pk id \
+  --dry-run
+
+# Migrasi PostgreSQL dengan batch size custom
+php vendor/bin/panda migrate users email email-key --batch-size 1000
+
+# Migrasi dengan custom primary key
+php vendor/bin/panda migrate transactions transaction_id txn-key --pk uuid
+```
+
+**Flag `migrate` yang tersedia:**
+
+| Flag | Short | Default | Deskripsi |
+|------|-------|---------|-----------|
+| `--batch-size <n>` | `-b` | `100` | Jumlah baris per chunk |
+| `--delay <ms>` | `-d` | `100` | Delay antar chunk (ms) |
+| `--pk <col>` | `-p` | `id` | Nama kolom primary key |
+| `--dry-run` | - | `false` | Estimasi scope tanpa mengubah data |
+
+##### Tabel Lengkap Referensi CLI
+
+| Perintah | Memerlukan Token | Mode Non-Interaktif | Deskripsi |
+|---|---|---:|---|
+| `php vendor/bin/panda init --token <token>` | ✅ Ya | ✅ `--quick` | Inisialisasi PANDA (wizard atau quick mode) |
+| `php vendor/bin/panda generate <kid>` | ❌ Tidak | ✅ (default non-interactive) | Generate kunci tambahan |
+| `php vendor/bin/panda status` | ❌ Tidak | ✅ (default non-interactive) | Tampilkan status konfigurasi |
+| `php vendor/bin/panda config` | ❌ Tidak | ✅ (default non-interactive) | Tampilkan detail konfigurasi lengkap |
+| `php vendor/bin/panda deinit` | ❌ Tidak | ✅ (default non-interactive) | Hapus konfigurasi PANDA |
+| `php vendor/bin/panda rotate-key --new-kid <kid>` | ❌ Tidak | ✅ (default non-interactive) | Rotasi kunci ke KID baru |
+| `php vendor/bin/panda shred <kid>` | ❌ Tidak | ✅ `--force` | Hapus kunci permanen |
+| `php vendor/bin/panda migrate <table> <col> <kid>` | ❌ Tidak | ✅ (default non-interactive) | Migrasi plaintext → encrypted |
 
 ---
 

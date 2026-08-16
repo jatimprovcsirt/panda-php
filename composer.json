@@ -2,6 +2,7 @@
   "name": "jatimprovcsirt/panda-php",
   "description": "PANDA (Private And Secure Data Access) SDK for PHP",
   "license": "MIT",
+  "version": "0.2.0",
   "minimum-stability": "stable",
   "prefer-stable": true,
   "authors": [

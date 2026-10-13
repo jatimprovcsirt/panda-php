@@ -1,6 +1,7 @@
 {
   "name": "jatimprovcsirt/panda-php",
   "description": "PANDA (Private And Secure Data Access) SDK for PHP",
+  "homepage": "https://panda.jatimprovcsirt.go.id",
   "license": "Apache-2.0",
   "version": "0.2.2",
   "minimum-stability": "stable",
@@ -11,6 +12,11 @@
       "email": "csirt@jatimprov.go.id"
     }
   ],
+  "support": {
+    "docs": "https://panda.jatimprovcsirt.go.id",
+    "issues": "https://github.com/jatimprovcsirt/panda-php/issues",
+    "source": "https://github.com/jatimprovcsirt/panda-php"
+  },
   "bin": [
     "bin/panda"
   ],

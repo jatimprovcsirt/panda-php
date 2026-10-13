@@ -45,20 +45,22 @@ commit history has the detail.
 | `0.1.1` | 2026-07-18 | Laravel integration; 48/64 hex token support. |
 | `0.1.0` | 2026-07-12 | First tag. |
 
-## Stray tags
+## A stray tag that was removed
 
-| Tag | Points at | What went wrong |
-|---|---|---|
-| `v0.5.0` | the commit that bumped `composer.json` to `0.2.0` | The tag name and the declared version were never the same number. It appears to have been an attempt to line this SDK up with `panda-go` and `panda-node`, both of which are at `0.5.0` — but that is not how this repository is versioned, and `composer.json` was not raised to match. |
+`v0.5.0` was tagged on the commit that bumped `composer.json` to `0.2.0`. The
+tag name and the declared version were never the same number — apparently an
+attempt to line this SDK up with `panda-go` and `panda-node`, both of which are
+at `0.5.0`, made without raising `composer.json` to match.
 
-`v0.5.0` **was never published to Packagist**, so nothing depends on it and no
-release is missing. It is left in place because deleting a tag is a decision
-about someone else's history, but it is worth knowing about:
+It was **never published to Packagist**, so nothing depended on it and no
+release went missing. It has since been deleted, from the remote and locally.
+That is why the release after `0.1.6` is `0.2.1` and not `0.5.1`.
 
-- Packagist sorts by version. If it ever registers `v0.5.0`, that becomes the
-  version `composer require` installs — and it contains `0.2.0` code.
-- The next release must therefore be `0.2.1` and not `0.5.1`. Continuing the
-  `0.5` line would make the two lines converge on a number that is still wrong.
+It is recorded here rather than forgotten because the deletion is not the
+interesting part — the reason it could happen is. Nothing in the repository
+said what the next version should be, so a number was chosen from outside it.
+That is what this file now answers.
 
-If `v0.5.0` is ever published by accident, the fix is to delete it on Packagist
-rather than to release a matching version.
+**If a stray is ever published by accident, the fix is to delete it on
+Packagist, not to release a matching version.** Releasing to match a wrong
+number makes it permanent.

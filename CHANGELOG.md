@@ -35,6 +35,7 @@ commit history has the detail.
 
 | Version | Date | What it was |
 |---|---|---|
+| `0.2.2` | 2026-10-13 | The portal call had never executed; `{"valid": "false"}` was read as approval. |
 | `0.2.1` | 2026-10-13 | Blind index normalisation now follows `panda-spec/blind-index-format.md` instead of PHP's own `trim()` and `strtolower()`. Both were ASCII-only, so a value with a trailing non-breaking space — what arrives when text is pasted from a word processor — produced a different index here than in panda-go, panda-node and panda-py. A lookup through another implementation returned nothing, with no error. Adds `ext-mbstring`. |
 | `0.2.0` | 2026-08-16 | Version bump; CLI non-interactive mode documentation. |
 | `0.1.6` | 2026-08-14 | README corrected PANDA CLI workflow. |
@@ -65,9 +66,9 @@ That is what this file now answers.
 Packagist, not to release a matching version.** Releasing to match a wrong
 number makes it permanent.
 
-## Unreleased — `validateTokenFormat`, and a test that passed for the wrong reason
+## What 0.2.2 fixes
 
-No new tag yet.
+### `validateTokenFormat`, and a test that passed for the wrong reason
 
 `TokenValidator` gains a public `validateTokenFormat()`, so the format check is
 reachable without going through `validateToken()` and its network call. The
@@ -87,7 +88,7 @@ compared against. Two test-side fixes:
 
 194 tests pass.
 
-## Unreleased, part two — the portal call had never run
+### The portal call had never run
 
 Three defects, one behind the other. The first is the reason the other two
 survived.

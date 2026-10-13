@@ -86,3 +86,53 @@ compared against. Two test-side fixes:
   `panda-spec/token-format.md`, which is where the rule lives.
 
 194 tests pass.
+
+## Unreleased, part two — the portal call had never run
+
+Three defects, one behind the other. The first is the reason the other two
+survived.
+
+### `CURLOPT_CONNECT_TIMEOUT` does not exist
+
+The portal call set `CURLOPT_CONNECT_TIMEOUT`. There is no such constant; the
+real one is `CURLOPT_CONNECTTIMEOUT`, with no underscore between CONNECT and
+TIMEOUT. On PHP 8 an undefined constant is a fatal `Error` rather than a
+warning and a string, so `validateTokenOnline()` threw at that line and **never
+made a request**. This SDK's portal gate has never once run.
+
+Nothing noticed because every test sets `PANDA_SKIP_ONLINE_VALIDATION=1` in
+`setUp` and returns before reaching curl. The one code path that mattered was
+the one path no test entered.
+
+### `{"valid": "false"}` was read as approval
+
+`if (!$result['valid'])`. A non-empty string is truthy in PHP, so a response
+explicitly saying the token is not valid was read as consent and a key was
+generated. Same for `{"valid": "no"}` and `{"valid": 1}`. `panda-go` refused
+all of them, because decoding a JSON string into a Go `bool` fails, and that
+disagreement is how it was found.
+
+Now `if ($result['valid'] !== true)`. Only the JSON boolean `true` is consent.
+
+### A trailing newline was a valid token here and not in Node or Go
+
+PCRE's `$` also matches immediately before a newline at the end of the subject,
+so `panda_live_<48 hex>\n` matched here and in `panda-py` while `panda-node`
+and `panda-go` rejected it — the same bytes, two answers. A token read from a
+file carries one routinely.
+
+The pattern now carries the `D` modifier, which anchors at the end of the
+string and nothing else.
+
+### Also
+
+- `composer.json` declares `ext-curl`. `TokenValidator` calls curl
+  unconditionally and the extension was not a declared dependency.
+- `tests/Unit/Security/TokenPortalValidationTest.php` is new: 28 tests,
+  intercepting curl by defining it in the `Panda\Crypto` namespace. The mocks
+  delegate to the real extension unless a test switches them on — defining
+  them unconditionally broke `InfisicalKeyProviderTest`, whose key fetch also
+  calls curl and suddenly received a `stdClass` where it expected a
+  `CurlHandle`.
+
+222 tests pass.

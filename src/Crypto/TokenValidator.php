@@ -24,8 +24,16 @@ class TokenValidator
     /**
      * Regex pattern for a valid PANDA access token.
      * Format: panda_(demo|live)_<48 or 64 hex characters>
+     *
+     * The trailing `D` matters and is not decoration. Without it PCRE's `$`
+     * also matches immediately before a newline at the end of the subject, so
+     * "panda_live_<48 hex>\n" matched here and in Python while Node and Go
+     * rejected it — the same bytes were a valid token in two SDKs and not in
+     * the other two. `D` anchors at the end of the string and nothing else,
+     * which is what the other two engines' `$` already meant. Python uses \Z
+     * for the same reason.
      */
-    public const TOKEN_PATTERN = '/^panda_(demo|live)_([a-f0-9]{48}|[a-f0-9]{64})$/';
+    public const TOKEN_PATTERN = '/^panda_(demo|live)_([a-f0-9]{48}|[a-f0-9]{64})$/D';
 
     /**
      * The static demo token shipped in .env.example and documentation.
@@ -76,7 +84,15 @@ class TokenValidator
             CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
             CURLOPT_POSTFIELDS => $payload,
             CURLOPT_TIMEOUT => 5,
-            CURLOPT_CONNECT_TIMEOUT => 5,
+            // Not CURLOPT_CONNECT_TIMEOUT. There is no such constant; the
+            // real one is CURLOPT_CONNECTTIMEOUT, with no underscore between
+            // CONNECT and TIMEOUT. On PHP 8 an undefined constant is a fatal
+            // Error rather than a warning, so this method threw "Undefined
+            // constant" at this line and never made a request at all — the
+            // portal gate in this SDK has never once run. Nothing noticed
+            // because every test sets PANDA_SKIP_ONLINE_VALIDATION=1 and
+            // returns before reaching curl.
+            CURLOPT_CONNECTTIMEOUT => 5,
         ]);
 
         $response = curl_exec($ch);
@@ -103,7 +119,12 @@ class TokenValidator
             );
         }
 
-        if (!$result['valid']) {
+        // Strictly the boolean true. `if (!$result['valid'])` was wrong in the
+        // dangerous direction: {"valid": "false"} is a non-empty string, which
+        // is truthy in PHP, so a response saying *no* was read as approval and
+        // a key was generated. panda-go refused it, because decoding a string
+        // into a Go bool fails — which is how the divergence was found.
+        if ($result['valid'] !== true) {
             $reason = $result['reason'] ?? 'invalid';
             switch ($reason) {
                 case 'revoked':

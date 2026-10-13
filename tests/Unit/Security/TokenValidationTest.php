@@ -9,7 +9,8 @@ use Panda\Exception\InvalidTokenException;
 /**
  * Security tests for token validation
  *
- * Tests token format validation (panda_(demo|live)_[a-f0-9]{48} pattern)
+ * Tests token format validation. The pattern is pinned in
+ * panda-spec/token-format.md and is 48 or 64 lowercase hex characters.
  */
 class TokenValidationTest extends TestCase
 {
@@ -177,8 +178,13 @@ class TokenValidationTest extends TestCase
         $this->assertMatchesRegularExpression(TokenValidator::TOKEN_PATTERN, $lowercaseToken);
 
         // The pattern only allows lowercase a-f
-        // Uppercase should NOT match
-        $uppercaseToken = 'panda_demo_' . 'ABCDEF1234567890ABCDEF' . str_repeat('0', 28);
+        // Uppercase should NOT match.
+        //
+        // This built 50 characters, not 48 — so it also failed on length, and
+        // would have gone on passing after somebody made the pattern
+        // case-insensitive. 22 + 26 is 48.
+        $uppercaseToken = 'panda_demo_' . 'ABCDEF1234567890ABCDEF' . str_repeat('0', 26);
+        $this->assertSame(59, strlen($uppercaseToken));
         $this->assertDoesNotMatchRegularExpression(TokenValidator::TOKEN_PATTERN, $uppercaseToken);
     }
 

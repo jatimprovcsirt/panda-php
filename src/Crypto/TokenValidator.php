@@ -140,7 +140,7 @@ class TokenValidator
             );
         }
 
-        if (!preg_match(self::TOKEN_PATTERN, $token)) {
+        if (!self::validateTokenFormat($token)) {
             throw new InvalidTokenException(
                 "The provided token does not match the expected format.\n" .
                 "Expected: panda_(demo|live)_<48 or 64 hex characters>\n" .
@@ -161,6 +161,21 @@ class TokenValidator
         // For non-demo tokens, perform online validation.
         // This is blocking and fail-closed — if it fails, init refuses to generate a key.
         self::validateTokenOnline($token);
+    }
+
+    /**
+     * Is this token well-formed?
+     *
+     * Distinct from validateToken(): that one consults the portal and throws.
+     * This one answers a question about the string, without network access,
+     * so it is what the cross-language vector runner and the CLI wizard both
+     * need. It exists as a method rather than as a preg_match at each call
+     * site because the pattern was written out at more than one call site and
+     * the copies had drifted.
+     */
+    public static function validateTokenFormat(string $token): bool
+    {
+        return (bool) preg_match(self::TOKEN_PATTERN, $token);
     }
 
     /**

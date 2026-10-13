@@ -64,3 +64,25 @@ That is what this file now answers.
 **If a stray is ever published by accident, the fix is to delete it on
 Packagist, not to release a matching version.** Releasing to match a wrong
 number makes it permanent.
+
+## Unreleased — `validateTokenFormat`, and a test that passed for the wrong reason
+
+No new tag yet.
+
+`TokenValidator` gains a public `validateTokenFormat()`, so the format check is
+reachable without going through `validateToken()` and its network call. The
+cross-language token vectors need exactly that, and so does any caller that
+wants to answer "is this shaped like a token" without asking the portal.
+
+The PHP pattern was already `48|64` and already lowercase-only, so this
+implementation needed no correction — it was the reference the other three were
+compared against. Two test-side fixes:
+
+- The case-sensitivity test built a 50-character token, not 48. It asserted
+  uppercase was rejected, which passed, but it would also have passed after
+  somebody made the pattern case-insensitive. It is 48 now, with the length
+  asserted directly so it cannot drift again unnoticed.
+- The file's header comment still said `[a-f0-9]{48}`. It now points at
+  `panda-spec/token-format.md`, which is where the rule lives.
+
+194 tests pass.

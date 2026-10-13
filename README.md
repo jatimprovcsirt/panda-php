@@ -627,7 +627,7 @@ Once backfilled, your zero-downtime database migration is complete!
 
 ## Security
 
-See [SECURITY.md](docs/security/SECURITY.md) for responsible disclosure.
+See [SECURITY.md](SECURITY.md) for responsible disclosure.
 
 ## License
 

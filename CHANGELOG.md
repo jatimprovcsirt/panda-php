@@ -28,6 +28,34 @@ Only two numbers matter, and they must match. Nothing else — not the version o
 another PANDA SDK, not a date, not the branch — decides what this release is
 called.
 
+
+## Licence: MIT to Apache-2.0
+
+Every repository now carries a verbatim Apache License 2.0 and a NOTICE file
+naming the copyright holder. Four of the six had no licence file at all, and
+`panda-node` had no `license` field in its manifest either — it declared
+nothing while listing a `LICENSE` in `files` that did not exist, so what npm
+actually published was unlicensed.
+
+Apache-2.0 over MIT for one reason: an express patent grant. MIT is silent on
+patents, and this is cryptographic software that other agencies and vendors are
+expected to embed in their own systems — the grant, and the retaliation clause
+that comes with it, is the part that matters when a third party deploys it.
+Apache-2.0 is no less permissive, so nothing about adoption gets harder.
+
+GPL was considered and rejected: copyleft would block exactly the cross-agency
+adoption this project exists for, and sit badly with public procurement.
+
+**What is already published does not change.** A licence cannot be altered
+retroactively on an artifact that has been released, so panda-py 0.2.1-0.2.3 on
+PyPI and panda-php 0.2.1-0.2.2 on Packagist stay MIT, panda-node 0.5.0 on npm
+stays unlicensed, and the Go tags through v0.5.1 carry no licence text
+either. This applies from the next release of each.
+
+The `LICENSE` file is the canonical text byte-for-byte — verified against its
+published SHA-256, `cfc7749b...523d30` — so it stays comparable to every other
+copy of it.
+
 ## Released
 
 Dates are the tag dates. The entries record what the release was *for*; the

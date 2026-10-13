@@ -631,4 +631,10 @@ See [SECURITY.md](docs/security/SECURITY.md) for responsible disclosure.
 
 ## License
 
-MIT
+Apache License 2.0 — see `LICENSE` for the full text and `NOTICE` for
+attribution.
+
+Previously MIT. Apache-2.0 is equally permissive and adds an express patent
+grant and a trademark clause, which MIT is silent on — it matters here because
+this is cryptographic software that other agencies and vendors are expected to
+embed in their own systems.

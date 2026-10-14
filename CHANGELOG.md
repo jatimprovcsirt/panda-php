@@ -63,6 +63,7 @@ commit history has the detail.
 
 | Version | Date | What it was |
 |---|---|---|
+| `0.2.3` | 2026-10-14 | `panda init` never ran — a Symfony shortcut collision. Quick mode ignored `--kid`. |
 | `0.2.2` | 2026-10-13 | The portal call had never executed; `{"valid": "false"}` was read as approval. |
 | `0.2.1` | 2026-10-13 | Blind index normalisation now follows `panda-spec/blind-index-format.md` instead of PHP's own `trim()` and `strtolower()`. Both were ASCII-only, so a value with a trailing non-breaking space — what arrives when text is pasted from a word processor — produced a different index here than in panda-go, panda-node and panda-py. A lookup through another implementation returned nothing, with no error. Adds `ext-mbstring`. |
 | `0.2.0` | 2026-08-16 | Version bump; CLI non-interactive mode documentation. |
@@ -73,6 +74,53 @@ commit history has the detail.
 | `0.1.2` | 2026-07-21 | Laravel migration stub fix. |
 | `0.1.1` | 2026-07-18 | Laravel integration; 48/64 hex token support. |
 | `0.1.0` | 2026-07-12 | First tag. |
+
+## What 0.2.3 fixes
+
+### `panda init` never ran
+
+Two commands were fine and one was not:
+
+```
+panda init       ← exited 1, no output
+panda status     Description: ...
+panda generate   Description: ...
+panda config     Description: ...
+```
+
+`InitCommand` declared `->addOption('quick', 'q', ...)`. Symfony's Application
+defines `--quiet` as `-q` for **every** command, and the collision is raised
+when the command is merged with the application:
+
+    An option with shortcut "q" already exists.
+
+That happens during bootstrap, so `init` died before executing a line of its
+own. It is the first command anyone runs, and the one the README, the CLI guide
+and the portal all open with.
+
+`panda-node` offers `-q` for the same flag and works, because Commander
+reserves nothing. Symfony does. The shortcut is gone here.
+
+**The entire test file passed throughout.** Every test calls
+`getDefinition()`, which returns the command's *own* options and never merges
+the application's — so nothing saw the collision. One test asserted the
+shortcut was `q`, which is to say it was asserting the bug. A new test
+registers the command with an Application and calls
+`mergeApplicationDefinition()`; it fails against the old code with the message
+above.
+
+### Quick mode ignored `--kid`
+
+The option was declared, then not passed to `runQuickInit`, which hardcoded
+`'default-key'` for both the config and the generated key. So
+
+    php bin/panda init --quick --token <token> --kid my-app-key-1
+
+wrote `PANDA_KEY_DEFAULT_KEY`. The value now carries through, and `defaultKid`
+is written to the credentials as the wizard writes it — previously the
+identifier appeared in a project only when the wizard had created it.
+
+223 tests pass.
 
 ## A stray tag that was removed
 

@@ -17,6 +17,29 @@ class InitCommand extends Command
 {
     protected static $defaultName = 'init';
 
+    /**
+     * The provider names `--provider` accepts.
+     *
+     * Public so the tests can name them rather than write them out again. A
+     * test that restates a rule asserts its own copy of it — how the token
+     * pattern's second copy survived a release, and how the blind index's
+     * second copy never failed at all.
+     */
+    public const PROVIDERS = ['local', 'vault', 'infisical'];
+
+    /**
+     * The environment variables each provider is configured from on the
+     * non-interactive path. These are the names VaultKeyProvider,
+     * InfisicalKeyProvider and CLAUDE.md's environment reference already use.
+     */
+    public const VAULT_REQUIRED_VARS = ['PANDA_VAULT_URL'];
+    public const VAULT_APPROLE_VARS = ['PANDA_VAULT_ROLE_ID', 'PANDA_VAULT_SECRET_ID'];
+    public const INFISICAL_REQUIRED_VARS = [
+        'PANDA_INFISICAL_CLIENT_ID',
+        'PANDA_INFISICAL_CLIENT_SECRET',
+        'PANDA_INFISICAL_PROJECT_ID',
+    ];
+
     protected function configure(): void
     {
         $this
@@ -39,9 +62,19 @@ class InitCommand extends Command
             // exited 1 before running a single line of its own — and `init` is
             // the first command anyone runs. `panda-node` can offer `-q`
             // because Commander reserves nothing; Symfony does.
-            ->addOption('quick', null, InputOption::VALUE_NONE, 'Skip wizard, use quick setup with local provider')
+            ->addOption('quick', null, InputOption::VALUE_NONE, 'Skip the wizard; non-interactive setup')
             ->addOption('reinit', null, InputOption::VALUE_NONE, 'Reinitialize even if already initialized')
-            ->addOption('skip-key-gen', null, InputOption::VALUE_NONE, 'Skip first key generation');
+            ->addOption('skip-key-gen', null, InputOption::VALUE_NONE, 'Skip first key generation')
+            // No shortcut, as `--quick` has none. Symfony reserves `-q` for
+            // its global `--quiet`, and this project has already lost a
+            // command to a shortcut collision — `panda-php`'s `init` could not
+            // start for as long as it declared one.
+            ->addOption(
+                'provider',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Key provider: local, vault, or infisical. Implies non-interactive, as --quick does.'
+            );
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -58,8 +91,22 @@ class InitCommand extends Command
 
         $token = $input->getOption('token') ?: getenv('PANDA_ACCESS_TOKEN');
 
-        if ($input->getOption('quick')) {
-            return $this->runQuickInit($io, $token, $input->getOption('kid'), $input->getOption('skip-key-gen'));
+        $provider = $input->getOption('provider');
+
+        // Naming a provider implies the non-interactive path for the same
+        // reason `--quick` does: it is an instruction the wizard cannot
+        // accept, since it would ask the question anyway and discard the
+        // answer. panda-node has read it this way since it gained the flag, so
+        // reading it otherwise here would introduce a disagreement in the
+        // course of removing one.
+        if ($input->getOption('quick') || $provider !== null) {
+            return $this->runQuickInit(
+                $io,
+                $token,
+                $input->getOption('kid'),
+                $input->getOption('skip-key-gen'),
+                $provider
+            );
         }
 
         return $this->runWizard($input, $output, $io, $helper, $token, $input->getOption('skip-key-gen'));
@@ -70,13 +117,29 @@ class InitCommand extends Command
      *   definition and then never passed here, so quick mode always generated
      *   `default-key` whatever the caller asked for.
      */
-    private function runQuickInit(SymfonyStyle $io, ?string $token, ?string $kid, bool $skipKeyGen): int
-    {
+    private function runQuickInit(
+        SymfonyStyle $io,
+        ?string $token,
+        ?string $kid,
+        bool $skipKeyGen,
+        ?string $provider = null
+    ): int {
         $io->title('PANDA Quick Init');
 
         $kid = trim((string) $kid);
         if ($kid === '') {
             $kid = 'default-key';
+        }
+
+        $provider = strtolower(trim((string) $provider));
+        if ($provider === '') {
+            $provider = 'local';
+        }
+        if (!in_array($provider, self::PROVIDERS, true)) {
+            $io->error(
+                "Unknown provider: {$provider}. Expected one of: " . implode(', ', self::PROVIDERS)
+            );
+            return Command::FAILURE;
         }
 
         // Validate token
@@ -95,22 +158,43 @@ class InitCommand extends Command
             }
         }
 
+        // Provider configuration is resolved before anything is written, so a
+        // short environment stops init with nothing left behind. The wizard
+        // may offer http://127.0.0.1:8200 as a default because a person is
+        // there to see it and disagree; this path cannot ask, and a
+        // credentials file naming a Vault that nothing said to use behaves
+        // like a working configuration until the first decrypt.
+        $providerConfig = [];
+        if ($provider !== 'local') {
+            try {
+                $providerConfig = $this->providerConfigFromEnv($provider);
+            } catch (\RuntimeException $e) {
+                $io->error($e->getMessage());
+                return Command::FAILURE;
+            }
+        }
+
         // Create .panda directory
         PandaDirectory::create();
 
         // Store credentials. `defaultKid` is carried here as the wizard
         // carries it, so a project initialised either way looks the same
         // afterwards.
-        $credentials = [
-            'token' => $token,
-            'provider' => 'local',
-            'defaultKid' => $kid,
-        ];
+        $credentials = array_merge(
+            [
+                'token' => $token,
+                'provider' => $provider,
+                'defaultKid' => $kid,
+            ],
+            $providerConfig
+        );
 
         PandaDirectory::writeCredentials($credentials);
 
-        // Generate default key
-        if (!$skipKeyGen) {
+        // Generate default key. Only for the local provider: a key generated
+        // "for" Vault or Infisical is a second key that nothing reads, and
+        // panda-node generates none on this path either.
+        if (!$skipKeyGen && $provider === 'local') {
             $this->generateAndStoreKey($io, $kid, $credentials, 'Default PANDA key');
         }
 
@@ -118,6 +202,107 @@ class InitCommand extends Command
         $io->note("Run 'panda status' to verify configuration.");
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * Read a non-local provider's configuration from the environment, or throw.
+     *
+     * Fail-closed, as the token gate on this path is.
+     *
+     * @return array<string,string> The credential fields to merge in.
+     * @throws \RuntimeException when a required variable is unset.
+     */
+    private function providerConfigFromEnv(string $provider): array
+    {
+        if ($provider === 'vault') {
+            $this->requireEnv(self::VAULT_REQUIRED_VARS, $provider);
+
+            $method = (string) getenv('PANDA_VAULT_AUTH_METHOD');
+            if ($method === '') {
+                // Inferred where it is unambiguous. Demanding the variable when
+                // the caller has already answered the question by setting role
+                // and secret, or a token, is the difference between a quick
+                // init that works and one that argues.
+                if ($this->envAllSet(self::VAULT_APPROLE_VARS)) {
+                    $method = 'approle';
+                } elseif (getenv('PANDA_VAULT_TOKEN')) {
+                    $method = 'token';
+                } else {
+                    $this->requireEnv(['PANDA_VAULT_AUTH_METHOD'], $provider);
+                }
+            }
+
+            if (!in_array($method, ['approle', 'token'], true)) {
+                throw new \RuntimeException(
+                    "PANDA_VAULT_AUTH_METHOD must be 'approle' or 'token', not '{$method}'."
+                );
+            }
+
+            $config = [
+                'vaultUrl' => getenv('PANDA_VAULT_URL'),
+                'vaultAuthMethod' => $method,
+                'vaultMount' => getenv('PANDA_VAULT_MOUNT_PATH') ?: 'secret',
+            ];
+
+            if ($method === 'approle') {
+                $this->requireEnv(self::VAULT_APPROLE_VARS, $provider);
+                $config['vaultRoleId'] = getenv('PANDA_VAULT_ROLE_ID');
+                $config['vaultSecretId'] = getenv('PANDA_VAULT_SECRET_ID');
+                $config['vaultTokenTTL'] = getenv('PANDA_VAULT_TOKEN_TTL') ?: '3600';
+            } else {
+                $this->requireEnv(['PANDA_VAULT_TOKEN'], $provider);
+                $config['vaultToken'] = getenv('PANDA_VAULT_TOKEN');
+            }
+
+            return $config;
+        }
+
+        // infisical
+        $this->requireEnv(self::INFISICAL_REQUIRED_VARS, $provider);
+
+        // The site URL and the cache TTL do have safe defaults — one is the
+        // public service, the other a duration — so unlike the credentials
+        // above they are defaulted rather than demanded.
+        return [
+            'infisicalSiteUrl' => getenv('PANDA_INFISICAL_SITE_URL') ?: 'https://app.infisical.com',
+            'infisicalClientId' => getenv('PANDA_INFISICAL_CLIENT_ID'),
+            'infisicalClientSecret' => getenv('PANDA_INFISICAL_CLIENT_SECRET'),
+            'infisicalProjectId' => getenv('PANDA_INFISICAL_PROJECT_ID'),
+            'infisicalEnvironment' => getenv('PANDA_INFISICAL_ENVIRONMENT') ?: 'dev',
+            'infisicalCacheTTL' => getenv('PANDA_INFISICAL_CACHE_TTL') ?: '300',
+        ];
+    }
+
+    /** @param list<string> $names */
+    private function envAllSet(array $names): bool
+    {
+        foreach ($names as $name) {
+            if (!getenv($name)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * @param list<string> $names
+     * @throws \RuntimeException naming every variable that is missing.
+     */
+    private function requireEnv(array $names, string $provider): void
+    {
+        $absent = array_values(array_filter($names, fn ($n) => !getenv($n)));
+        if ($absent === []) {
+            return;
+        }
+
+        $joined = implode(' and ', $absent);
+        $verb = count($absent) > 1 ? 'These are' : 'It is';
+
+        throw new \RuntimeException(
+            "--provider {$provider} needs {$joined} to be set. {$verb} read from the "
+            . 'environment: this path cannot prompt, and defaulting would write a '
+            . 'configuration nobody chose.'
+        );
     }
 
     private function runWizard(InputInterface $input, OutputInterface $output, SymfonyStyle $io, $helper, ?string $token, bool $skipKeyGen): int

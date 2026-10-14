@@ -25,7 +25,13 @@ class GenerateCommand extends Command
             ->setName('generate')
             ->setDescription('Generate a new encryption key (interactive or specify kid)')
             ->addArgument('kid', InputArgument::OPTIONAL, 'Key Identifier')
-            ->addOption('description', 'd', InputOption::VALUE_OPTIONAL, 'Key description');
+            ->addOption('description', 'd', InputOption::VALUE_OPTIONAL, 'Key description')
+            ->addOption(
+                'provider',
+                null,
+                InputOption::VALUE_REQUIRED,
+                "Provider to store the key in. Defaults to the one 'init' recorded."
+            );
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -68,6 +74,21 @@ class GenerateCommand extends Command
         if (!$credentials) {
             $io->error("No PANDA configuration found. Run 'panda init' first");
             return Command::FAILURE;
+        }
+
+        // The override, applied before the branch rather than inside it.
+        // panda-node called this `--keystore`; one concept under two names is
+        // two definitions of it, and cli-flags.md pins --provider.
+        $providerOverride = $input->getOption('provider');
+        if ($providerOverride !== null) {
+            if (!in_array($providerOverride, InitCommand::PROVIDERS, true)) {
+                $io->error(
+                    "Unknown provider: {$providerOverride}. Expected one of: "
+                    . implode(', ', InitCommand::PROVIDERS)
+                );
+                return Command::FAILURE;
+            }
+            $credentials['provider'] = $providerOverride;
         }
 
         // Generate and store key

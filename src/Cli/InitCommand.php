@@ -29,7 +29,17 @@ class InitCommand extends Command
                 InputOption::VALUE_OPTIONAL,
                 'Per-application access token'
             )
-            ->addOption('quick', 'q', InputOption::VALUE_NONE, 'Skip wizard, use quick setup with local provider')
+            // No `-q` shortcut. Symfony's Application defines `--quiet` as
+            // `-q` for every command, and a command that redefines it is
+            // rejected when it is registered:
+            //
+            //     An option with shortcut "q" already exists.
+            //
+            // That error fired during application bootstrap, so `panda init`
+            // exited 1 before running a single line of its own — and `init` is
+            // the first command anyone runs. `panda-node` can offer `-q`
+            // because Commander reserves nothing; Symfony does.
+            ->addOption('quick', null, InputOption::VALUE_NONE, 'Skip wizard, use quick setup with local provider')
             ->addOption('reinit', null, InputOption::VALUE_NONE, 'Reinitialize even if already initialized')
             ->addOption('skip-key-gen', null, InputOption::VALUE_NONE, 'Skip first key generation');
     }
@@ -49,15 +59,25 @@ class InitCommand extends Command
         $token = $input->getOption('token') ?: getenv('PANDA_ACCESS_TOKEN');
 
         if ($input->getOption('quick')) {
-            return $this->runQuickInit($io, $token, $input->getOption('skip-key-gen'));
+            return $this->runQuickInit($io, $token, $input->getOption('kid'), $input->getOption('skip-key-gen'));
         }
 
         return $this->runWizard($input, $output, $io, $helper, $token, $input->getOption('skip-key-gen'));
     }
 
-    private function runQuickInit(SymfonyStyle $io, ?string $token, bool $skipKeyGen): int
+    /**
+     * @param string|null $kid The `--kid` value. It was accepted by the option
+     *   definition and then never passed here, so quick mode always generated
+     *   `default-key` whatever the caller asked for.
+     */
+    private function runQuickInit(SymfonyStyle $io, ?string $token, ?string $kid, bool $skipKeyGen): int
     {
         $io->title('PANDA Quick Init');
+
+        $kid = trim((string) $kid);
+        if ($kid === '') {
+            $kid = 'default-key';
+        }
 
         // Validate token
         if ($token) {
@@ -78,17 +98,20 @@ class InitCommand extends Command
         // Create .panda directory
         PandaDirectory::create();
 
-        // Store credentials
+        // Store credentials. `defaultKid` is carried here as the wizard
+        // carries it, so a project initialised either way looks the same
+        // afterwards.
         $credentials = [
             'token' => $token,
             'provider' => 'local',
+            'defaultKid' => $kid,
         ];
 
         PandaDirectory::writeCredentials($credentials);
 
         // Generate default key
         if (!$skipKeyGen) {
-            $this->generateAndStoreKey($io, 'default-key', $credentials, 'Default PANDA key');
+            $this->generateAndStoreKey($io, $kid, $credentials, 'Default PANDA key');
         }
 
         $io->success('PANDA initialized successfully!');

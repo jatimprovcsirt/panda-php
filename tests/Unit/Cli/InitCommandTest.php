@@ -113,6 +113,31 @@ class InitCommandTest extends TestCase
     }
 
     /**
+     * Every command must survive being registered with the application.
+     *
+     * `getDefinition()` — which every other test here calls — returns the
+     * command's *own* options and does not merge the application's globals.
+     * `mergeApplicationDefinition()` does, and it is the call the CLI makes on
+     * every run.
+     *
+     * `init` had `->addOption('quick', 'q', ...)`, and Symfony's application
+     * defines `--quiet` as `-q` for every command. The collision threw during
+     * bootstrap, so `panda init` exited 1 before running any of its own code —
+     * and `init` is the first command anyone runs. The whole test file passed
+     * throughout, because none of it ever merged the definitions.
+     */
+    public function testRegistersWithTheApplicationWithoutOptionCollisions(): void
+    {
+        $application = new Application();
+        $command = new InitCommand();
+        $application->add($command);
+
+        $command->mergeApplicationDefinition();
+
+        $this->assertTrue($command->getDefinition()->hasOption('quick'));
+    }
+
+    /**
      * Test --quick option exists
      */
     public function testQuickOptionExists(): void
@@ -122,7 +147,10 @@ class InitCommandTest extends TestCase
 
         $this->assertTrue($definition->hasOption('quick'));
         $quickOption = $definition->getOption('quick');
-        $this->assertEquals('q', $quickOption->getShortcut());
+        // No shortcut. This assertion used to require 'q', which is the
+        // shortcut Symfony assigns to the global --quiet option — so it was
+        // asserting the very thing that stopped the command from loading.
+        $this->assertNull($quickOption->getShortcut());
         $this->assertFalse($quickOption->acceptValue());
     }
 

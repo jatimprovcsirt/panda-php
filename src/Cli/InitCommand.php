@@ -525,7 +525,7 @@ class InitCommand extends Command
         }
 
         // Generate 32-byte random key
-        $keyBytes = random_bytes(32);
+        $keyBytes = \Panda\Telemetry\TelemetryClient::newEncryptionKey();
         $keyBase64 = base64_encode($keyBytes);
 
         switch ($credentials['provider']) {

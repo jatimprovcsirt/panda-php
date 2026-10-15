@@ -31,7 +31,7 @@ class RotateKeyCommand extends Command
         $envVarName = "PANDA_KEY_{$normalizedKid}";
 
         // Generate 32 bytes key
-        $keyBytes = random_bytes(32);
+        $keyBytes = \Panda\Telemetry\TelemetryClient::newEncryptionKey();
         $keyBase64 = base64_encode($keyBytes);
 
         $envFile = getcwd() . '/.env';

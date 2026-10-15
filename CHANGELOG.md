@@ -63,6 +63,7 @@ commit history has the detail.
 
 | Version | Date | What it was |
 |---|---|---|
+| `0.2.5` | 2026-10-15 | Telemetry counts instead of calling out per operation; the audit label now matches the path taken. |
 | `0.2.4` | 2026-10-14 | `--provider` on `init` and `generate`; Vault and Infisical were unreachable from a pipeline. |
 | `0.2.3` | 2026-10-14 | `panda init` never ran — a Symfony shortcut collision. Quick mode ignored `--kid`. |
 | `0.2.2` | 2026-10-13 | The portal call had never executed; `{"valid": "false"}` was read as approval. |
@@ -122,6 +123,83 @@ about. `--skip-key-gen` therefore has nothing to suppress on this path.
 ### Submodule pin moves to `panda-spec` v4
 
 The tag that carries `cli-flags.md` and the tenth interop section.
+
+
+## What 0.2.5 changes
+
+### Telemetry no longer runs inside an operation
+
+The cipher called an HTTP client directly, from `encrypt()` and from the
+full-plaintext decrypt — once per operation. A library whose promise is that it
+works without the portal was opening a socket in its hot path, and it had to be
+handed a token to do it, taken from `PANDA_PORTAL_TOKEN`, **which nothing in
+this project has ever set**. So the calls never fired: two independent reasons
+for the same silence.
+
+Counting is now an addition to a counter. Reporting happens on a window
+boundary — whichever of 300 seconds or 1000 operations comes first — and the
+token comes from the credentials `panda init` wrote.
+
+What is sent is pinned in `panda-spec/telemetry-format.md`: three counters
+(encrypts, decrypts, raw decrypts) and the SDK version, and on key generation
+a one-way fingerprint. No plaintext, no ciphertext, no key material, no field
+name, no field value, no record identifier.
+
+### The endpoint had two definitions and they disagreed
+
+This SDK posted telemetry to `https://portal.panda.gov.id/api/telemetry` — a
+hostname that does not resolve — while the token gate next door held the
+correct one. Both are now derived from a single base URL constant.
+
+### The audit trail said "decrypt_raw" for operations that were not
+
+`decrypt()` calls `decryptRaw()`. The shared implementation logged
+`decrypt_raw` on every outcome, and `decrypt` logged `decrypt_masked` on top.
+So every masked read wrote **two** audit entries, one of them asserting a raw
+decrypt that never happened — and a *failed* masked read wrote only the false
+one, leaving it indistinguishable from a failed raw read.
+
+`decryptRaw` is documented as "explicitly logged as a distinct audit event". It
+was not distinct, and the log was dominated by raw-decrypt entries for
+operations that never decrypted anything raw. The shared implementation now
+takes the label, and each public method logs its own outcome exactly once.
+
+### `verify_interop.js` section 11
+
+Every implementation is given the same counters and must produce the same JSON:
+224 checks across all four SDKs, up from 200.
+
+### An API change
+
+The cipher no longer takes a telemetry client or a token — there is no client
+to hold. Callers that passed them will get a compile error, which is the
+correct outcome for an argument that no longer has a meaning.
+
+### Key generation is reported once per key
+
+Every path that produces a key — quick init, the wizard, `generate` and
+`rotate-key` — now goes through one function that generates the key and
+reports it. Adding the report at each call site would have repeated the defect
+this whole change is about: a rule defined by where somebody remembered to
+write it, which is how `decrypt` came to be uncounted in the first place.
+
+### The counters are shared across workers, and say so when they cannot be
+
+PHP-FPM recycles workers, so a counter in a worker's memory sees one slice of
+the traffic and dies before it reports. Quiet installations — the government
+deployment profile — would lose their counts, and the bias would fall on
+exactly the installations most worth counting.
+
+The hot path still increments process memory, which is free. The batch is
+merged into a shared store at request shutdown, in one operation: APCu when the
+extension is present, otherwise a lock-protected file in `.panda/`, which also
+survives a php-fpm restart. When neither is available the SDK falls back to
+process memory **and logs that it has done so** — a figure that is quietly low
+is worse than one known to be low.
+
+The version reported to the portal comes from Composer's record of the
+installed package rather than a constant here, so there is no second definition
+of it to drift.
 
 ## What 0.2.3 fixes
 

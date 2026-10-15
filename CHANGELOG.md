@@ -63,6 +63,7 @@ commit history has the detail.
 
 | Version | Date | What it was |
 |---|---|---|
+| `0.2.6` | 2026-10-15 | The package could not be installed. A dependency on a package that does not exist. |
 | `0.2.5` | 2026-10-15 | Telemetry counts instead of calling out per operation; the audit label now matches the path taken. |
 | `0.2.4` | 2026-10-14 | `--provider` on `init` and `generate`; Vault and Infisical were unreachable from a pipeline. |
 | `0.2.3` | 2026-10-14 | `panda init` never ran — a Symfony shortcut collision. Quick mode ignored `--kid`. |
@@ -124,6 +125,42 @@ about. `--skip-key-gen` therefore has nothing to suppress on this path.
 
 The tag that carries `cli-flags.md` and the tenth interop section.
 
+
+## What 0.2.6 fixes
+
+**The package could not be installed by anyone.**
+
+`composer.json` required `infisical/infisical-php-sdk ^1.0.0`. That package is
+not on Packagist. The similarly named `infisical/php-sdk` tops out at v0.0.2,
+so the constraint could not have been satisfied by it either.
+
+**The code does not use it.** `InfisicalKeyProvider` talks to Infisical over
+raw `curl`. The require line was the only mention of that package anywhere in
+the repository — which is how it survived: nothing failed at a call site,
+because there is no call site.
+
+Three consequences, and the last is the one that matters:
+
+- CI has been red on every push since 13 October, failing at "Install
+  dependencies". `composer.lock` is gitignored, so CI does a **full
+  resolution** with no lock to lean on — which is why it failed while a local
+  `composer install` against the untracked lock did not.
+- Every release carried it, back to the commit that introduced the line.
+- **A consumer could not install this package at all**, at any version.
+  Reproduced from an empty project:
+
+      jatimprovcsirt/panda-php 0.2.5 requires infisical/infisical-php-sdk ^1.0.0
+      -> could not be found in any version
+
+  Composer resolves dependencies transitively, so an unresolvable require in
+  this package is unresolvable for whoever depends on it.
+
+The line is gone and the lock hash refreshed. `composer update` — the
+resolution CI performs — now completes.
+
+A dependency that is declared, unresolvable and unused is worse than a missing
+one: a missing one fails at the call site, this one fails before anything can
+be installed at all.
 
 ## What 0.2.5 changes
 

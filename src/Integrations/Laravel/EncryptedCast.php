@@ -13,7 +13,7 @@ class EncryptedCast implements CastsAttributes
     /**
      * Create a new cast instance.
      * The cast can be configured on models as:
-     * 'nik' => EncryptedCast::class . ':opd-dukcapil-key-1'
+     * 'nik' => EncryptedCast::class . ':nik-key-1'
      */
     public function __construct(?string $kid = null)
     {

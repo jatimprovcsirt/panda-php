@@ -28,7 +28,7 @@ class LocalKeyProvider implements KeyProvider
             return $this->keys[$kid];
         }
 
-        // 2. Normalize kid for env variable (e.g. opd-dukcapil-key-1 -> PANDA_KEY_OPD_DUKCAPIL_KEY_1)
+        // 2. Normalize kid for env variable (e.g. nik-key-1 -> PANDA_KEY_NIK_KEY_1)
         $normalizedKid = strtoupper(preg_replace('/[^A-Za-z0-9]/', '_', $kid));
         $envKeyName = "PANDA_KEY_" . $normalizedKid;
 

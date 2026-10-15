@@ -43,7 +43,7 @@ Setelah menjalankan perintah ini, wizard akan:
 1. Memvalidasi token Anda
 2. Meminta Anda memasukkan Key Identifier (KID) untuk kunci pertama
 3. Menghasilkan kunci 256-bit yang aman secara kriptografis secara **lokal**
-4. Menambahkan kunci dalam format base64 ke file `.env` Anda (misal: `PANDA_KEY_OPD_DUKCAPIL_KEY_1=...`)
+4. Menambahkan kunci dalam format base64 ke file `.env` Anda (misal: `PANDA_KEY_NIK_KEY_1=...`)
 
 > [!NOTE]
 > Untuk pengembangan lokal, Anda dapat menggunakan demo token bawaan:
@@ -54,7 +54,7 @@ Setelah menjalankan perintah ini, wizard akan:
 Perintah `init` melakukan hal berikut:
 1. Memvalidasi format token Anda.
 2. Menghasilkan kunci 256-bit yang aman secara kriptografis secara **lokal** (token tidak pernah menerima kunci ini).
-3. Secara otomatis menambahkan kunci dalam format base64 ke file `.env` Anda (misal: `PANDA_KEY_OPD_DUKCAPIL_KEY_1=...`).
+3. Secara otomatis menambahkan kunci dalam format base64 ke file `.env` Anda (misal: `PANDA_KEY_NIK_KEY_1=...`).
 
 ### Langkah 3: Restart Server/Terminal (Penting!)
 
@@ -69,10 +69,10 @@ Jika aplikasi Anda membutuhkan lebih dari satu kunci (misalnya untuk bidang data
 
 ```bash
 # Kunci kedua: untuk field nomor HP
-php vendor/bin/panda generate opd-dukcapil-key-2
+php vendor/bin/panda generate nik-key-2
 
 # Kunci untuk blind index (suffix -idx wajib dipisah dari kunci enkripsi)
-php vendor/bin/panda generate opd-dukcapil-key-1-idx
+php vendor/bin/panda generate nik-key-1-idx
 ```
 
 > [!NOTE]
@@ -84,7 +84,7 @@ Untuk merotasi kunci pada KID yang sudah ada, gunakan `rotate-key`. Perintah ini
 
 ```bash
 # Rotasi: buat kunci baru dan set sebagai default KID aktif
-php vendor/bin/panda rotate-key --new-kid opd-dukcapil-key-2
+php vendor/bin/panda rotate-key --new-kid nik-key-2
 ```
 
 ### Menghapus Kunci (Crypto-Shred)
@@ -92,7 +92,7 @@ php vendor/bin/panda rotate-key --new-kid opd-dukcapil-key-2
 ```bash
 # Hapus kunci secara permanen
 # PERINGATAN: Data yang dienkripsi dengan kunci ini tidak bisa didekripsi lagi!
-php vendor/bin/panda shred opd-dukcapil-key-old
+php vendor/bin/panda shred nik-key-old
 ```
 
 ### Referensi CLI
@@ -300,7 +300,7 @@ Encrypt plaintext before writing it to a `TEXT` database column:
 
 ```php
 $rawNik = '3201012501990001';
-$kid = 'opd-dukcapil-key-1';
+$kid = 'nik-key-1';
 
 $envelope = $cipher->encrypt($rawNik, $kid);
 $jsonForDatabase = $envelope->toJson(); 
@@ -332,7 +332,7 @@ To query encrypted columns, you must compute and store a blind index hash in a s
 use Panda\BlindIndex\BlindIndexer;
 
 // Note: The blind index key is distinct and uses the "-idx" suffix
-$blindIndexKid = 'opd-dukcapil-key-1-idx';
+$blindIndexKid = 'nik-key-1-idx';
 $blindIndexKey = $keyProvider->getKey($blindIndexKid);
 
 // 1. Compute blind index during INSERT/UPDATE
@@ -471,7 +471,7 @@ Initialize your local master key using the CLI command:
 php vendor/bin/panda init --token YOUR_TOKEN
 ```
 
-The wizard will prompt you for your Key Identifier (KID). Enter `opd-dukcapil-key-1` when prompted.
+The wizard will prompt you for your Key Identifier (KID). Enter `nik-key-1` when prompted.
 
 Then, **restart your development server** (e.g. `spark serve` or php-fpm container).
 
@@ -492,7 +492,7 @@ use Panda\BlindIndex\BlindIndexer;
 use Panda\Crypto\LocalKeyProvider;
 
 $rawNik = '3201012501990001';
-$kid = 'opd-dukcapil-key-1';
+$kid = 'nik-key-1';
 
 // 1. Encrypt raw text
 $envelope = $cipher->encrypt($rawNik, $kid);
@@ -521,7 +521,7 @@ $searchQuery = '3201012501990001';
 
 // 1. Hash the search value
 $keyProvider = new LocalKeyProvider();
-$blindIndexKey = $keyProvider->getKey("opd-dukcapil-key-1-idx");
+$blindIndexKey = $keyProvider->getKey("nik-key-1-idx");
 $searchHash = BlindIndexer::generate($searchQuery, $blindIndexKey, 'digits');
 
 // 2. Perform query lookup
@@ -583,7 +583,7 @@ To convert all existing plaintext records in the database to encrypted envelopes
 
 ```bash
 # php vendor/bin/panda migrate <table> <column> <kid>
-php vendor/bin/panda migrate citizens nik opd-dukcapil-key-1
+php vendor/bin/panda migrate citizens nik nik-key-1
 ```
 This reads your DB in chunks (default: 100 rows), encrypts plaintext entries, updates them, and checkpoints its state in a `panda_migration_state` table so it can safely resume if interrupted.
 
@@ -636,5 +636,5 @@ attribution.
 
 Previously MIT. Apache-2.0 is equally permissive and adds an express patent
 grant and a trademark clause, which MIT is silent on — it matters here because
-this is cryptographic software that other agencies and vendors are expected to
+this is cryptographic software that other organizations and vendors are expected to
 embed in their own systems.

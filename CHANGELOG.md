@@ -38,7 +38,7 @@ nothing while listing a `LICENSE` in `files` that did not exist, so what npm
 actually published was unlicensed.
 
 Apache-2.0 over MIT for one reason: an express patent grant. MIT is silent on
-patents, and this is cryptographic software that other agencies and vendors are
+patents, and this is cryptographic software that other organizations and vendors are
 expected to embed in their own systems — the grant, and the retaliation clause
 that comes with it, is the part that matters when a third party deploys it.
 Apache-2.0 is no less permissive, so nothing about adoption gets harder.
